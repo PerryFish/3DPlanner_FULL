@@ -36,9 +36,11 @@ class SyntheticExternalPointcloudPublisher(Node):
         rng = float(self.get_parameter('range_m').value)
         phase = self.tick * 0.06
         pts = []
-        # Moving floor patch.
-        center_x = 0.08 * self.tick
-        center_y = 1.5 * math.sin(phase)
+        # Keep long-run synthetic clouds inside the bridge range while still
+        # sweeping new map volume over several minutes.
+        cycle = (self.tick % 1200) / 1200.0
+        center_x = -6.0 + 12.0 * cycle + 0.5 * math.sin(phase * 0.41)
+        center_y = 2.2 * math.sin(phase * 0.73) + 0.7 * math.sin(self.tick * 0.011)
         grid = int(math.sqrt(count * 0.45))
         for ix in range(-grid, grid + 1):
             for iy in range(-grid, grid + 1):
@@ -52,7 +54,7 @@ class SyntheticExternalPointcloudPublisher(Node):
         for k in range(count // 4):
             y = -3.5 + (k % 60) * 0.12
             z = 0.1 + (k // 60) * 0.16
-            x = center_x + 3.0 + 0.5 * math.sin(phase + y)
+            x = center_x + 2.5 + 0.6 * math.sin(phase + y)
             pts.append((x, y, min(z, 2.8)))
         # Obstacle/cube shell.
         cube_cx = center_x + 1.2 * math.sin(phase * 0.5)
