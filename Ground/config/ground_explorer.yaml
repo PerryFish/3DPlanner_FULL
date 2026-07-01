@@ -38,3 +38,8 @@ ground_3d_frontier_node:
     low_gain_blacklist_ttl_sec: 120.0
     min_useful_path_length: 0.8
     recent_goal_history_size: 50
+    octomap_adaptive_scoring: true
+    unknown_boundary_weight: 2.0
+    occupied_penalty_weight: 4.0
+    path_collision_penalty_weight: 2.5
+    oscillation_penalty_weight: 1.5

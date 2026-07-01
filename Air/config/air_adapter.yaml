@@ -30,3 +30,8 @@ air_exploration_stub_node:
     min_coverage_gain_per_goal: 0.005
     low_gain_blacklist_ttl_sec: 90.0
     recent_goal_history_size: 50
+    octomap_adaptive_scoring: true
+    air_octomap_safety_radius: 0.6
+    unknown_boundary_weight: 2.0
+    occupied_penalty_weight: 4.0
+    low_gain_penalty_weight: 1.0

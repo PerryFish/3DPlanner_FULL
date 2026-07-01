@@ -16,6 +16,7 @@ octomap_pointcloud_backend:
     coverage_resolution: 0.5
     esdf_is_fallback: true
     marker_max_count: 5000
+    max_frontier_marker_count: 3000
 
 octomap_pointcloud_backend_node:
   ros__parameters:
@@ -35,6 +36,7 @@ octomap_pointcloud_backend_node:
     coverage_resolution: 0.5
     esdf_is_fallback: true
     marker_max_count: 5000
+    max_frontier_marker_count: 3000
 
 octomap_server:
   ros__parameters:

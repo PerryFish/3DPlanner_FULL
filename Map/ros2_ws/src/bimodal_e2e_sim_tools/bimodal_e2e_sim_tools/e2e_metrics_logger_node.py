@@ -25,6 +25,9 @@ class E2EMetricsLogger(Node):
         self.executor_status = ''
         self.current_mode = ''
         self.last_coverage_proxy = None
+        self.first_coverage_proxy = None
+        self.last_occupied_voxel_count = None
+        self.first_occupied_voxel_count = None
         self.last_executed_path_length = 0.0
         self.last_active_path_count_time = None
         self.last_active_path_count = 0
@@ -64,6 +67,33 @@ class E2EMetricsLogger(Node):
             [
                 'timestamp', 'active_path_count', 'accepted_path_update_count',
                 'ignored_path_update_count', 'path_switch_rate', 'current_mode',
+            ],
+        )
+        self._open_csv(
+            'p2e_octomap_map_metrics',
+            'p2e_octomap_map_metrics.csv',
+            [
+                'timestamp', 'occupied_voxel_count', 'map_point_count', 'coverage_proxy',
+                'coverage_delta_last_10s', 'occupied_density', 'frontier_candidate_proxy',
+                'unknown_boundary_proxy', 'backend_mode', 'is_real_octomap_server',
+            ],
+        )
+        self._open_csv(
+            'p2e_octomap_planner_quality',
+            'p2e_octomap_planner_quality.csv',
+            [
+                'timestamp', 'source', 'backend_mode', 'selected_score', 'coverage_gain_estimate',
+                'octomap_frontier_gain', 'unknown_boundary_gain', 'occupied_penalty',
+                'path_collision_risk', 'valid_candidate_count', 'rejected_by_occupied_count',
+                'low_gain_blacklist_size', 'raw_status',
+            ],
+        )
+        self._open_csv(
+            'p2e_octomap_exploration_efficiency',
+            'p2e_octomap_exploration_efficiency.csv',
+            [
+                'timestamp', 'coverage_proxy', 'coverage_delta', 'occupied_voxel_count',
+                'executed_path_length', 'coverage_gain_per_meter', 'occupied_voxel_gain_per_meter',
             ],
         )
 
@@ -138,8 +168,14 @@ class E2EMetricsLogger(Node):
     def _map_metrics_cb(self, msg):
         values = self._parse_key_values(msg.data)
         coverage = self._float(values.get('coverage_proxy'), 0.0)
+        occupied = self._float(values.get('occupied_voxel_count', values.get('accumulated_voxel_count')), 0.0)
+        if self.first_coverage_proxy is None:
+            self.first_coverage_proxy = coverage
+        if self.first_occupied_voxel_count is None:
+            self.first_occupied_voxel_count = occupied
         coverage_delta = 0.0 if self.last_coverage_proxy is None else coverage - self.last_coverage_proxy
         self.last_coverage_proxy = coverage
+        self.last_occupied_voxel_count = occupied
         map_point_count = values.get('accumulated_point_count', '')
         gain_per_meter = 0.0
         if self.total_distance > 1e-6:
@@ -160,6 +196,34 @@ class E2EMetricsLogger(Node):
             map_point_count,
         ])
         self.files['p2d_coverage_efficiency'].flush()
+        coverage_gain_per_meter = 0.0
+        occupied_gain_per_meter = 0.0
+        if self.total_distance > 1e-6:
+            coverage_gain_per_meter = (coverage - self.first_coverage_proxy) / self.total_distance
+            occupied_gain_per_meter = (occupied - self.first_occupied_voxel_count) / self.total_distance
+        self.writers['p2e_octomap_map_metrics'].writerow([
+            self._now(),
+            values.get('occupied_voxel_count', values.get('accumulated_voxel_count', '')),
+            values.get('map_point_count', values.get('accumulated_point_count', '')),
+            values.get('coverage_proxy', ''),
+            values.get('coverage_delta_last_10s', ''),
+            values.get('occupied_density', ''),
+            values.get('frontier_candidate_proxy', ''),
+            values.get('unknown_boundary_proxy', ''),
+            values.get('backend_mode', ''),
+            values.get('is_real_octomap_server', ''),
+        ])
+        self.files['p2e_octomap_map_metrics'].flush()
+        self.writers['p2e_octomap_exploration_efficiency'].writerow([
+            self._now(),
+            f'{coverage:.6f}',
+            f'{coverage - self.first_coverage_proxy:.6f}',
+            f'{occupied:.0f}',
+            f'{self.total_distance:.3f}',
+            f'{coverage_gain_per_meter:.9f}',
+            f'{occupied_gain_per_meter:.6f}',
+        ])
+        self.files['p2e_octomap_exploration_efficiency'].flush()
 
     def _air_status_cb(self, msg):
         self.air_status = msg.data
@@ -207,6 +271,22 @@ class E2EMetricsLogger(Node):
             status,
         ])
         self.files['p2d_goal_quality'].flush()
+        self.writers['p2e_octomap_planner_quality'].writerow([
+            self._now(),
+            source,
+            values.get('backend_mode', ''),
+            values.get('selected_score', ''),
+            values.get('coverage_gain_estimate', ''),
+            values.get('octomap_frontier_gain', values.get('frontier_ring_score', '')),
+            values.get('unknown_boundary_gain', ''),
+            values.get('occupied_penalty', ''),
+            values.get('path_collision_risk', ''),
+            values.get('valid_candidate_count', ''),
+            values.get('rejected_by_occupied_count', ''),
+            values.get('low_gain_blacklist_size', ''),
+            status,
+        ])
+        self.files['p2e_octomap_planner_quality'].flush()
 
     def _write_path_stability(self, status):
         values = self._parse_key_values(status)

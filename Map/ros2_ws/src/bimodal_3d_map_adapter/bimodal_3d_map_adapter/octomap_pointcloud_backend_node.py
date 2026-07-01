@@ -31,6 +31,7 @@ class OctomapPointcloudBackend(Node):
             ('coverage_resolution', 0.5),
             ('esdf_is_fallback', True),
             ('marker_max_count', 5000),
+            ('max_frontier_marker_count', 3000),
         ]:
             self.declare_parameter(name, value)
 
@@ -59,6 +60,7 @@ class OctomapPointcloudBackend(Node):
         self.status_pub = self.create_publisher(String, '/bimodal/map_backend_status', 10)
         self.metrics_pub = self.create_publisher(String, '/bimodal/map_metrics', 10)
         self.octomap_marker_pub = self.create_publisher(MarkerArray, '/bimodal/octomap_occupied_markers', 10)
+        self.frontier_marker_pub = self.create_publisher(MarkerArray, '/bimodal/octomap_frontier_markers', 10)
         self.coverage_marker_pub = self.create_publisher(MarkerArray, '/bimodal/coverage_markers', 10)
         self.map_status_marker_pub = self.create_publisher(Marker, '/bimodal/map_status_marker', 10)
 
@@ -104,6 +106,7 @@ class OctomapPointcloudBackend(Node):
         self.last_output_time = self.get_clock().now()
         self._publish_boundary(now, frame)
         self._publish_octomap_markers(now, frame, points)
+        self._publish_frontier_markers(now, frame)
         self._publish_coverage_markers(now, frame, points)
         self._publish_status_marker(now, frame)
         self._publish_status_and_metrics()
@@ -165,6 +168,31 @@ class OctomapPointcloudBackend(Node):
             marker.points.append(point)
         markers.append(marker)
         self.octomap_marker_pub.publish(MarkerArray(markers=markers))
+
+    def _publish_frontier_markers(self, stamp, frame):
+        markers = [self._clear_marker(stamp, frame, 'bimodal_octomap_frontiers')]
+        frontier = Marker()
+        frontier.header.stamp = stamp
+        frontier.header.frame_id = frame
+        frontier.ns = 'bimodal_octomap_frontiers'
+        frontier.id = 1
+        frontier.type = Marker.CUBE_LIST
+        frontier.action = Marker.ADD
+        scale = max(float(self.get_parameter('coverage_resolution').value), self._resolution())
+        frontier.scale.x = frontier.scale.y = frontier.scale.z = min(scale, 0.32)
+        frontier.color.r = 0.0
+        frontier.color.g = 0.9
+        frontier.color.b = 1.0
+        frontier.color.a = 0.55
+
+        max_count = max(int(self.get_parameter('max_frontier_marker_count').value), 1)
+        candidates = self._frontier_candidate_centers(max_count)
+        for x, y, z in candidates:
+            point = Point()
+            point.x, point.y, point.z = float(x), float(y), float(z)
+            frontier.points.append(point)
+        markers.append(frontier)
+        self.frontier_marker_pub.publish(MarkerArray(markers=markers))
 
     def _publish_coverage_markers(self, stamp, frame, points):
         markers = [self._clear_marker(stamp, frame, 'bimodal_coverage')]
@@ -251,6 +279,11 @@ class OctomapPointcloudBackend(Node):
         self.coverage_history.append((now_sec, coverage))
         self.coverage_history = [(t, c) for t, c in self.coverage_history if now_sec - t <= 12.0]
         old = self.coverage_history[0][1] if self.coverage_history else coverage
+        theoretical = self._theoretical_voxel_count()
+        occupied_density = 0.0 if theoretical <= 0 else len(self.occupied) / float(theoretical)
+        boundary_volume = self._boundary_volume()
+        observed_volume_proxy = len(self.occupied) * (self._resolution() ** 3)
+        frontier_proxy, unknown_proxy = self._frontier_proxies()
         return (
             f'backend_mode={self.get_parameter("backend_mode").value} '
             f'occupied_voxel_count={len(self.occupied)} '
@@ -262,9 +295,62 @@ class OctomapPointcloudBackend(Node):
             f'input_cloud_count={self.input_cloud_count} '
             f'last_input_age_sec={self._age(self.last_input_time):.3f} '
             f'resolution={self._resolution():.3f} '
+            f'boundary_volume={boundary_volume:.3f} '
+            f'observed_volume_proxy={observed_volume_proxy:.3f} '
+            f'occupied_density={occupied_density:.9f} '
+            f'frontier_candidate_proxy={frontier_proxy:.6f} '
+            f'unknown_boundary_proxy={unknown_proxy:.6f} '
             f'esdf_is_fallback={str(bool(self.get_parameter("esdf_is_fallback").value)).lower()} '
             'is_real_octomap_server=false'
         )
+
+    def _frontier_proxies(self):
+        if not self.occupied:
+            return 0.0, 0.0
+        keys = set(self.occupied.keys())
+        sample_step = max(len(keys) // 6000, 1)
+        sampled = list(keys)[::sample_step]
+        boundary_voxels = 0
+        empty_neighbors = 0
+        total_neighbors = 0
+        for key in sampled:
+            local_empty = 0
+            for nb in self._neighbor_keys(key):
+                total_neighbors += 1
+                if nb not in keys:
+                    empty_neighbors += 1
+                    local_empty += 1
+            if local_empty >= 6:
+                boundary_voxels += 1
+        frontier_proxy = boundary_voxels / float(max(len(sampled), 1))
+        unknown_proxy = empty_neighbors / float(max(total_neighbors, 1))
+        return min(max(frontier_proxy, 0.0), 1.0), min(max(unknown_proxy, 0.0), 1.0)
+
+    def _frontier_candidate_centers(self, max_count):
+        if not self.occupied:
+            return []
+        keys = set(self.occupied.keys())
+        resolution = self._resolution()
+        centers = []
+        sample_step = max(len(keys) // max(max_count, 1), 1)
+        for key in list(keys)[::sample_step]:
+            empty_count = sum(1 for nb in self._neighbor_keys(key) if nb not in keys)
+            if empty_count >= 6:
+                centers.append(self._voxel_center(key, resolution))
+                if len(centers) >= max_count:
+                    break
+        return centers
+
+    @staticmethod
+    def _neighbor_keys(key):
+        x, y, z = key
+        for dx, dy, dz in (
+            (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+            (1, 1, 0), (1, -1, 0), (-1, 1, 0), (-1, -1, 0),
+            (1, 0, 1), (-1, 0, 1), (0, 1, 1), (0, -1, 1),
+            (1, 0, -1), (-1, 0, -1), (0, 1, -1), (0, -1, -1),
+        ):
+            yield (x + dx, y + dy, z + dz)
 
     def _coverage_proxy(self):
         res = max(float(self.get_parameter('coverage_resolution').value), 1e-6)
@@ -290,6 +376,18 @@ class OctomapPointcloudBackend(Node):
             and float(self.get_parameter('boundary_min_y').value) <= y <= float(self.get_parameter('boundary_max_y').value)
             and float(self.get_parameter('boundary_min_z').value) <= z <= float(self.get_parameter('boundary_max_z').value)
         )
+
+    def _boundary_volume(self):
+        return (
+            (float(self.get_parameter('boundary_max_x').value) - float(self.get_parameter('boundary_min_x').value))
+            * (float(self.get_parameter('boundary_max_y').value) - float(self.get_parameter('boundary_min_y').value))
+            * (float(self.get_parameter('boundary_max_z').value) - float(self.get_parameter('boundary_min_z').value))
+        )
+
+    def _theoretical_voxel_count(self):
+        volume = self._boundary_volume()
+        voxel_volume = self._resolution() ** 3
+        return max(int(volume / max(voxel_volume, 1e-9)), 1)
 
     def _resolution(self):
         return max(float(self.get_parameter('resolution').value), 1e-4)

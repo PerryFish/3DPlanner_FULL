@@ -30,12 +30,19 @@ class Ground3DFrontier(Node):
             'low_gain_window_sec': 20.0, 'min_coverage_gain_per_goal': 0.004,
             'low_gain_blacklist_ttl_sec': 120.0, 'min_useful_path_length': 0.8,
             'recent_goal_history_size': 50,
+            'octomap_adaptive_scoring': True, 'unknown_boundary_weight': 2.0,
+            'occupied_penalty_weight': 4.0, 'path_collision_penalty_weight': 2.5,
+            'oscillation_penalty_weight': 1.5,
         }
         for key, value in defaults.items():
             self.declare_parameter(key, value)
         self.odom = None
         self.points = []
         self.map_voxels = set()
+        self.map_metrics = {}
+        self.map_backend_status = {}
+        self.backend_mode = 'unknown'
+        self.map_resolution = 0.5
         self.last_coverage_proxy = 0.0
         self.esdf_received = False
         self.boundary_received = False
@@ -66,8 +73,14 @@ class Ground3DFrontier(Node):
         self.last_frontier_ring_score = 0.0
         self.last_path_usefulness_score = 0.0
         self.last_oscillation_penalty = 0.0
+        self.last_octomap_frontier_gain = 0.0
+        self.last_unknown_boundary_gain = 0.0
+        self.last_occupied_penalty = 0.0
+        self.last_rejected_occupied = 0
         self.create_subscription(Odometry, '/bimodal/odom', self._odom_cb, 10)
         self.create_subscription(PointCloud2, '/bimodal/map_3d', self._map_cb, 10)
+        self.create_subscription(String, '/bimodal/map_metrics', self._map_metrics_cb, 10)
+        self.create_subscription(String, '/bimodal/map_backend_status', self._map_backend_status_cb, 10)
         self.create_subscription(PointCloud2, '/bimodal/esdf', lambda msg: setattr(self, 'esdf_received', True), 10)
         self.create_subscription(MarkerArray, '/bimodal/exploration_boundary', self._boundary_cb, 10)
         self.goal_pub = self.create_publisher(PoseStamped, '/ground/exploration_goal', 10)
@@ -82,9 +95,19 @@ class Ground3DFrontier(Node):
 
     def _map_cb(self, msg):
         self.points = [(float(p[0]), float(p[1]), float(p[2])) for p in point_cloud2.read_points(msg, field_names=('x', 'y', 'z'), skip_nans=True)]
-        voxel = 0.5
+        voxel = self.map_resolution
         self.map_voxels = {(round(x / voxel), round(y / voxel), round(z / voxel)) for x, y, z in self.points}
         self.last_coverage_proxy = min(len(self.map_voxels) / 9600.0, 1.0)
+
+    def _map_metrics_cb(self, msg):
+        self.map_metrics = self._parse_key_values(msg.data)
+        self.backend_mode = self.map_metrics.get('backend_mode', self.backend_mode)
+        self.map_resolution = self._float(self.map_metrics.get('resolution'), self.map_resolution)
+        self.last_coverage_proxy = self._float(self.map_metrics.get('coverage_proxy'), self.last_coverage_proxy)
+
+    def _map_backend_status_cb(self, msg):
+        self.map_backend_status = self._parse_key_values(msg.data)
+        self.backend_mode = self.map_backend_status.get('backend_mode', self.backend_mode)
 
     def _boundary_cb(self, msg):
         if not msg.markers:
@@ -128,7 +151,7 @@ class Ground3DFrontier(Node):
 
     def _coverage_gain_estimate(self, x, y, z):
         radius = 2.0
-        voxel = 0.5
+        voxel = max(self.map_resolution, 0.2)
         unknown = 0
         total = 0
         steps = range(-int(radius / voxel), int(radius / voxel) + 1)
@@ -143,6 +166,39 @@ class Ground3DFrontier(Node):
                 if (round(px / voxel), round(py / voxel), round(pz / voxel)) not in self.map_voxels:
                     unknown += 1
         return 0.0 if total <= 0 else unknown / total
+
+    def _octomap_active(self):
+        return bool(self.get_parameter('octomap_adaptive_scoring').value) and self.backend_mode == 'octomap_style_voxel'
+
+    def _occupied_penalty(self, x, y, z, clearance):
+        safety = float(self.get_parameter('safety_radius').value)
+        near = 0
+        ground_z = float(self.get_parameter('ground_z').value)
+        for px, py, pz in self.points[:: max(len(self.points) // 1500, 1)]:
+            if pz <= ground_z + 0.12:
+                continue
+            if math.dist((x, y, z), (px, py, pz)) < safety * 1.8:
+                near += 1
+        density_penalty = min(near / 10.0, 1.0)
+        clearance_penalty = max(0.0, 1.0 - clearance / max(safety, 0.05))
+        return max(density_penalty, clearance_penalty)
+
+    def _unknown_boundary_gain(self, x, y, z):
+        near = 0
+        ring = 0
+        ground_z = float(self.get_parameter('ground_z').value)
+        for px, py, pz in self.points[:: max(len(self.points) // 1500, 1)]:
+            if pz <= ground_z + 0.12:
+                continue
+            dist = math.dist((x, y, z), (px, py, pz))
+            if dist < 1.0:
+                near += 1
+            elif dist < 2.8:
+                ring += 1
+        local_edge = min(ring / 14.0, 1.0) * (1.0 / (1.0 + near / 4.0))
+        global_unknown = self._float(self.map_metrics.get('unknown_boundary_proxy'), 0.0)
+        global_frontier = self._float(self.map_metrics.get('frontier_candidate_proxy'), 0.0)
+        return max(0.0, min(0.60 * local_edge + 0.25 * global_unknown + 0.15 * global_frontier, 1.0))
 
     def _path_usefulness(self, x, y, z, d, collision_risk):
         coverage_gain = self._coverage_gain_estimate(x, y, z)
@@ -248,6 +304,7 @@ class Ground3DFrontier(Node):
         self.last_held_goal = False
         self.last_switched_goal = False
         self.last_rejected_low_gain = 0
+        self.last_rejected_occupied = 0
         if self.odom is None:
             self.status = 'WAITING_FOR_ODOM'
             self._publish_status()
@@ -298,10 +355,18 @@ class Ground3DFrontier(Node):
                     continue
                 unknown_gain = self._unknown_gain(x, y, candidate_z)
                 frontier_gain = self._frontier_gain(x, y, candidate_z) if bool(self.get_parameter('frontier_bias_enabled').value) else 0.0
+                unknown_boundary_gain = self._unknown_boundary_gain(x, y, candidate_z) if self._octomap_active() else 0.0
+                octomap_frontier_gain = max(frontier_gain, unknown_boundary_gain * 0.7) if self._octomap_active() else frontier_gain
                 coverage_gain = self._coverage_gain_estimate(x, y, candidate_z)
                 sector_gain = self._sector_gain(x, y) if bool(self.get_parameter('sector_balance_enabled').value) else 0.0
                 distance_gain = min(d / max(max_d, 0.1), 1.0)
                 obstacle_penalty = 1.0 / max(clearance, 0.05)
+                occupied_penalty = self._occupied_penalty(x, y, candidate_z, clearance) if self._octomap_active() else obstacle_penalty
+                if self._octomap_active() and occupied_penalty > 0.88:
+                    self.last_rejected_occupied += 1
+                    rejected.append((x, y, candidate_z, 'rejected_occupied'))
+                    y += res
+                    continue
                 revisit_penalty = sum(max(0.0, 1.0 - math.hypot(x - vx, y - vy) / 1.5) for vx, vy in self.visited)
                 oscillation_penalty = self._oscillation_penalty(x, y)
                 if revisit_penalty > 0.85:
@@ -318,19 +383,21 @@ class Ground3DFrontier(Node):
                     continue
                 score = (
                     float(self.get_parameter('unknown_gain_weight').value) * unknown_gain
-                    + float(self.get_parameter('frontier_gain_weight').value) * frontier_gain
+                    + float(self.get_parameter('frontier_gain_weight').value) * octomap_frontier_gain
+                    + float(self.get_parameter('unknown_boundary_weight').value) * unknown_boundary_gain
                     + float(self.get_parameter('coverage_gain_weight').value) * coverage_gain
                     + float(self.get_parameter('path_usefulness_weight').value) * path_usefulness
                     + float(self.get_parameter('sector_balance_weight').value) * sector_gain
                     + float(self.get_parameter('distance_gain_weight').value) * distance_gain
-                    - float(self.get_parameter('obstacle_penalty_weight').value) * obstacle_penalty
+                    - float(self.get_parameter('occupied_penalty_weight' if self._octomap_active() else 'obstacle_penalty_weight').value) * occupied_penalty
+                    - float(self.get_parameter('path_collision_penalty_weight').value) * (1.0 if collision_risk else 0.0)
                     - float(self.get_parameter('revisit_penalty_weight').value) * revisit_penalty
-                    - oscillation_penalty
+                    - float(self.get_parameter('oscillation_penalty_weight').value) * oscillation_penalty
                 )
                 if collision_risk:
                     score -= 2.0
                     rejected.append((x, y, candidate_z, 'path_collision_risk'))
-                scored.append((score, x, y, candidate_z, clearance, revisit_penalty, frontier_gain, coverage_gain, path_usefulness, oscillation_penalty))
+                scored.append((score, x, y, candidate_z, clearance, revisit_penalty, octomap_frontier_gain, coverage_gain, path_usefulness, oscillation_penalty, unknown_boundary_gain, occupied_penalty, collision_risk))
                 y += res
             x += res
         if not scored:
@@ -345,7 +412,7 @@ class Ground3DFrontier(Node):
             return
         scored.sort(reverse=True, key=lambda item: item[0])
         best = scored[0]
-        _, gx, gy, gz, _, _, frontier_gain, coverage_gain, path_usefulness, oscillation_penalty = best
+        _, gx, gy, gz, _, _, frontier_gain, coverage_gain, path_usefulness, oscillation_penalty, unknown_boundary_gain, occupied_penalty, collision_risk = best
         if self._should_keep_current_goal(best[0]):
             self.status = 'HOLDING_CURRENT_GOAL_PROGRESS_GATE'
             self.last_held_goal = True
@@ -357,9 +424,13 @@ class Ground3DFrontier(Node):
             self._add_blacklist(self.last_goal)
         self.last_goal_score = float(best[0])
         self.last_frontier_ring_score = float(frontier_gain)
+        self.last_octomap_frontier_gain = float(frontier_gain)
         self.last_coverage_gain_estimate = float(coverage_gain)
         self.last_path_usefulness_score = float(path_usefulness)
         self.last_oscillation_penalty = float(oscillation_penalty)
+        self.last_unknown_boundary_gain = float(unknown_boundary_gain)
+        self.last_occupied_penalty = float(occupied_penalty)
+        self.last_path_collision_risk = bool(collision_risk)
         self.last_switched_goal = self.last_goal is not None
         if self.last_switched_goal:
             self.switched_goal_count += 1
@@ -429,8 +500,12 @@ class Ground3DFrontier(Node):
         marker_id = 0
         max_markers = int(self.get_parameter('max_candidate_markers').value)
         for item in scored[:max_markers]:
-            _, x, y, z, _, revisit, frontier_gain, coverage_gain, _, _ = item
-            if frontier_gain > 0.75 or coverage_gain > 0.75:
+            _, x, y, z, _, revisit, frontier_gain, coverage_gain, _, _, unknown_boundary_gain, occupied_penalty, collision_risk = item
+            if occupied_penalty > 0.75 or collision_risk:
+                color = (1.0, 0.1, 0.1)
+            elif unknown_boundary_gain > 0.65:
+                color = (0.0, 0.95, 1.0)
+            elif frontier_gain > 0.75 or coverage_gain > 0.75:
                 color = (0.0, 1.0, 0.35)
             else:
                 color = (0.1, 0.8 if revisit < 0.1 else 0.4, 0.2)
@@ -445,6 +520,8 @@ class Ground3DFrontier(Node):
                 color = (0.9, 0.1, 0.9)
             elif reason == 'low_gain':
                 color = (0.45, 0.0, 0.7)
+            elif reason == 'rejected_occupied':
+                color = (1.0, 0.0, 0.0)
             else:
                 color = (0.9, 0.1, 0.1)
             markers.append(self._marker(marker_id, x, y, z, color[0], color[1], color[2], 0.35, now))
@@ -477,20 +554,26 @@ class Ground3DFrontier(Node):
     def _publish_status(self):
         msg = String()
         age = time.time() - self.last_goal_time if self.last_goal_time else -1.0
+        octomap_active = self._octomap_active()
+        planning_mode = 'P2E_ground_octomap_frontier_quality' if octomap_active else 'P2D_ground_frontier_quality'
         msg.data = (
             f'{self.status} odom_received={self.odom is not None} map_received={bool(self.points)} '
             f'esdf_received={self.esdf_received} boundary_received={self.boundary_received} '
             f'candidate_count={self.last_candidate_count} valid_candidate_count={self.last_valid_candidate_count} '
             f'selected_score={self.last_selected_score:.3f} selected_goal={self.last_goal} '
             f'coverage_gain_estimate={self.last_coverage_gain_estimate:.3f} frontier_ring_score={self.last_frontier_ring_score:.3f} '
+            f'octomap_frontier_gain={self.last_octomap_frontier_gain:.3f} unknown_boundary_gain={self.last_unknown_boundary_gain:.3f} '
+            f'occupied_penalty={self.last_occupied_penalty:.3f} '
             f'path_usefulness_score={self.last_path_usefulness_score:.3f} oscillation_penalty={self.last_oscillation_penalty:.3f} '
             f'held_goal={str(self.last_held_goal).lower()} switched_goal={str(self.last_switched_goal).lower()} '
             f'blacklist_size={len(self.blacklist)} low_gain_blacklist_size={len(self.low_gain_blacklist)} selected_sector={self.last_selected_sector} '
             f'rejected_by_collision_count={self.last_rejected_collision} rejected_by_revisit_count={self.last_rejected_revisit} '
+            f'rejected_by_occupied_count={self.last_rejected_occupied} '
             f'rejected_by_blacklist_count={self.last_rejected_blacklist} rejected_by_low_gain_count={self.last_rejected_low_gain} '
             f'path_collision_risk={self.last_path_collision_risk} map_point_count={len(self.points)} '
             f'held_goal_count={self.held_goal_count} switched_goal_count={self.switched_goal_count} '
-            f'planning_mode=P2D_ground_frontier_quality last_goal_age_sec={age:.2f}'
+            f'backend_mode={self.backend_mode} octomap_adaptive_scoring={str(octomap_active).lower()} '
+            f'planning_mode={planning_mode} last_goal_age_sec={age:.2f}'
         )
         self.status_pub.publish(msg)
         if self.last_marker_array is not None:
@@ -498,6 +581,22 @@ class Ground3DFrontier(Node):
             for marker in self.last_marker_array.markers:
                 marker.header.stamp = stamp
             self.marker_pub.publish(self.last_marker_array)
+
+    @staticmethod
+    def _parse_key_values(text):
+        out = {}
+        for token in text.split():
+            if '=' in token:
+                key, value = token.split('=', 1)
+                out[key] = value
+        return out
+
+    @staticmethod
+    def _float(value, default=0.0):
+        try:
+            return float(value)
+        except Exception:
+            return default
 
 
 def main(args=None):

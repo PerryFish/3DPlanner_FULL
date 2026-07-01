@@ -51,6 +51,11 @@ Visualization Manager:
             Value: /bimodal/octomap_occupied_markers
         - Class: rviz_default_plugins/MarkerArray
           Enabled: true
+          Name: octomap_frontier_markers
+          Topic:
+            Value: /bimodal/octomap_frontier_markers
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
           Name: exploration_boundary
           Topic:
             Value: /bimodal/exploration_boundary

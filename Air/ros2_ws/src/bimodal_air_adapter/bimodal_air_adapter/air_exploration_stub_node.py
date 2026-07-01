@@ -44,9 +44,18 @@ class AirExplorationStub(Node):
         self.declare_parameter('min_coverage_gain_per_goal', 0.005)
         self.declare_parameter('low_gain_blacklist_ttl_sec', 90.0)
         self.declare_parameter('recent_goal_history_size', 50)
+        self.declare_parameter('octomap_adaptive_scoring', True)
+        self.declare_parameter('air_octomap_safety_radius', 0.6)
+        self.declare_parameter('unknown_boundary_weight', 2.0)
+        self.declare_parameter('occupied_penalty_weight', 4.0)
+        self.declare_parameter('low_gain_penalty_weight', 1.0)
         self.odom = None
         self.points = []
         self.map_voxels = set()
+        self.map_metrics = {}
+        self.map_backend_status = {}
+        self.backend_mode = 'unknown'
+        self.map_resolution = 0.5
         self.last_coverage_proxy = 0.0
         self.boundary = (-10.0, 10.0, -10.0, 10.0, 0.0, 3.0)
         self.boundary_received = False
@@ -74,10 +83,16 @@ class AirExplorationStub(Node):
         self.low_gain_blacklist = []
         self.active_goal_monitor = None
         self.last_frontier_ring_score = 0.0
+        self.last_octomap_frontier_gain = 0.0
+        self.last_unknown_boundary_gain = 0.0
+        self.last_occupied_penalty = 0.0
         self.last_coverage_gain_estimate = 0.0
         self.last_goal_progress_distance = 0.0
+        self.last_rejected_occupied = 0
         self.create_subscription(Odometry, '/bimodal/odom', self._odom_cb, 10)
         self.create_subscription(PointCloud2, '/bimodal/map_3d', self._map_cb, 10)
+        self.create_subscription(String, '/bimodal/map_metrics', self._map_metrics_cb, 10)
+        self.create_subscription(String, '/bimodal/map_backend_status', self._map_backend_status_cb, 10)
         self.create_subscription(PointCloud2, '/bimodal/esdf', lambda msg: None, 10)
         self.create_subscription(MarkerArray, '/bimodal/exploration_boundary', self._boundary_cb, 10)
         self.goal_pub = self.create_publisher(PoseStamped, '/air/exploration_goal', 10)
@@ -94,9 +109,19 @@ class AirExplorationStub(Node):
 
     def _map_cb(self, msg):
         self.points = [(float(p[0]), float(p[1]), float(p[2])) for p in point_cloud2.read_points(msg, field_names=('x', 'y', 'z'), skip_nans=True)]
-        voxel = 0.5
+        voxel = self.map_resolution
         self.map_voxels = {(round(x / voxel), round(y / voxel), round(z / voxel)) for x, y, z in self.points}
         self.last_coverage_proxy = min(len(self.map_voxels) / 9600.0, 1.0)
+
+    def _map_metrics_cb(self, msg):
+        self.map_metrics = self._parse_key_values(msg.data)
+        self.backend_mode = self.map_metrics.get('backend_mode', self.backend_mode)
+        self.map_resolution = self._float(self.map_metrics.get('resolution'), self.map_resolution)
+        self.last_coverage_proxy = self._float(self.map_metrics.get('coverage_proxy'), self.last_coverage_proxy)
+
+    def _map_backend_status_cb(self, msg):
+        self.map_backend_status = self._parse_key_values(msg.data)
+        self.backend_mode = self.map_backend_status.get('backend_mode', self.backend_mode)
 
     def _boundary_cb(self, msg):
         if not msg.markers:
@@ -150,7 +175,7 @@ class AirExplorationStub(Node):
     def _coverage_gain_estimate(self, candidate):
         cx, cy, cz = candidate
         radius = float(self.get_parameter('coverage_gain_radius').value)
-        voxel = 0.5
+        voxel = max(self.map_resolution, 0.2)
         unknown = 0
         total = 0
         steps = range(-int(radius / voxel), int(radius / voxel) + 1)
@@ -168,6 +193,37 @@ class AirExplorationStub(Node):
         if total <= 0:
             return 0.0
         return unknown / total
+
+    def _octomap_active(self):
+        return bool(self.get_parameter('octomap_adaptive_scoring').value) and self.backend_mode == 'octomap_style_voxel'
+
+    def _occupied_penalty(self, candidate):
+        cx, cy, cz = candidate
+        safety = float(self.get_parameter('air_octomap_safety_radius').value)
+        clearance = self._clearance(candidate)
+        near = 0
+        for x, y, z in self.points[:: max(len(self.points) // 1200, 1)]:
+            if math.dist((cx, cy, cz), (x, y, z)) < safety * 1.5:
+                near += 1
+        density_penalty = min(near / 12.0, 1.0)
+        clearance_penalty = max(0.0, 1.0 - clearance / max(safety, 0.05))
+        return max(density_penalty, clearance_penalty)
+
+    def _unknown_boundary_gain(self, candidate):
+        cx, cy, cz = candidate
+        radius = float(self.get_parameter('coverage_gain_radius').value)
+        near = 0
+        ring = 0
+        for x, y, z in self.points[:: max(len(self.points) // 1500, 1)]:
+            dist = math.dist((cx, cy, cz), (x, y, z))
+            if dist < radius * 0.7:
+                near += 1
+            elif dist < radius * 1.8:
+                ring += 1
+        local_edge = min(ring / 16.0, 1.0) * (1.0 / (1.0 + near / 5.0))
+        global_unknown = self._float(self.map_metrics.get('unknown_boundary_proxy'), 0.0)
+        global_frontier = self._float(self.map_metrics.get('frontier_candidate_proxy'), 0.0)
+        return max(0.0, min(0.55 * local_edge + 0.25 * global_unknown + 0.20 * global_frontier, 1.0))
 
     def _revisit_penalty(self, candidate):
         cx, cy, _ = candidate
@@ -187,17 +243,23 @@ class AirExplorationStub(Node):
         clearance = self._clearance(candidate)
         obstacle_penalty = 1.0 / max(clearance, 0.05)
         revisit_penalty = self._revisit_penalty(candidate)
+        unknown_boundary_gain = self._unknown_boundary_gain(candidate) if self._octomap_active() else 0.0
+        occupied_penalty = self._occupied_penalty(candidate) if self._octomap_active() else obstacle_penalty
+        low_gain_penalty = 1.0 if self._is_low_gain_blacklisted(candidate) else 0.0
+        octomap_frontier_gain = max(frontier_gain, unknown_boundary_gain * 0.7) if self._octomap_active() else frontier_gain
         score = (
             float(self.get_parameter('unknown_gain_weight').value) * unknown_gain
-            + float(self.get_parameter('frontier_gain_weight').value) * frontier_gain
+            + float(self.get_parameter('frontier_gain_weight').value) * octomap_frontier_gain
+            + float(self.get_parameter('unknown_boundary_weight').value) * unknown_boundary_gain
             + float(self.get_parameter('coverage_gain_weight').value) * coverage_gain
             + float(self.get_parameter('sector_balance_weight').value) * sector_gain
             + float(self.get_parameter('forward_gain_weight').value) * forward_gain
             + float(self.get_parameter('distance_gain_weight').value) * distance_gain
-            - float(self.get_parameter('obstacle_penalty_weight').value) * obstacle_penalty
+            - float(self.get_parameter('occupied_penalty_weight' if self._octomap_active() else 'obstacle_penalty_weight').value) * occupied_penalty
             - float(self.get_parameter('revisit_penalty_weight').value) * revisit_penalty
+            - float(self.get_parameter('low_gain_penalty_weight').value) * low_gain_penalty
         )
-        return score, clearance, revisit_penalty, frontier_gain, coverage_gain
+        return score, clearance, revisit_penalty, octomap_frontier_gain, coverage_gain, unknown_boundary_gain, occupied_penalty
 
     def _plan(self):
         self.tick_count += 1
@@ -207,6 +269,7 @@ class AirExplorationStub(Node):
         self.last_held_goal = False
         self.last_switched_goal = False
         self.last_rejected_low_gain = 0
+        self.last_rejected_occupied = 0
         if self.odom is None or not self.points or not self.boundary_received:
             self._publish_status()
             return
@@ -227,10 +290,14 @@ class AirExplorationStub(Node):
         candidates = self._candidate_points()
         for cand in candidates:
             d = math.hypot(cand[0] - rx, cand[1] - ry)
-            score, clearance, revisit_penalty, frontier_gain, coverage_gain = self._score_candidate(cand)
+            score, clearance, revisit_penalty, frontier_gain, coverage_gain, unknown_boundary_gain, occupied_penalty = self._score_candidate(cand)
             if d < min_d or d > max_d or clearance < safety:
                 rejected_collision += 1
                 rejected.append((cand, 'collision_or_distance'))
+                continue
+            if self._octomap_active() and occupied_penalty > 0.88:
+                self.last_rejected_occupied += 1
+                rejected.append((cand, 'rejected_occupied'))
                 continue
             if self._is_blacklisted(cand):
                 rejected_blacklist += 1
@@ -248,7 +315,7 @@ class AirExplorationStub(Node):
                 rejected_revisit += 1
                 rejected.append((cand, 'recent_goal'))
                 continue
-            scored.append((score, cand, clearance, revisit_penalty, frontier_gain, coverage_gain))
+            scored.append((score, cand, clearance, revisit_penalty, frontier_gain, coverage_gain, unknown_boundary_gain, occupied_penalty))
         if not scored:
             self.last_candidate_count = len(candidates)
             self.last_valid_candidate_count = 0
@@ -271,7 +338,10 @@ class AirExplorationStub(Node):
             self._add_blacklist(self.last_goal)
         self.last_goal_score = float(best[0])
         self.last_frontier_ring_score = float(best[4])
+        self.last_octomap_frontier_gain = float(best[4])
         self.last_coverage_gain_estimate = float(best[5])
+        self.last_unknown_boundary_gain = float(best[6])
+        self.last_occupied_penalty = float(best[7])
         self.last_switched_goal = self.last_goal is not None
         if self.last_switched_goal:
             self.switched_goal_count += 1
@@ -413,8 +483,13 @@ class AirExplorationStub(Node):
         markers.append(clear)
         marker_id = 1
         max_markers = int(self.get_parameter('max_candidate_markers').value)
-        for score, cand, _, revisit, frontier_gain, coverage_gain in scored[:max_markers]:
-            if frontier_gain > 0.75 or coverage_gain > 0.75:
+        for item in scored[:max_markers]:
+            score, cand, _, revisit, frontier_gain, coverage_gain, unknown_boundary_gain, occupied_penalty = item
+            if occupied_penalty > 0.75:
+                r, g, b = (1.0, 0.1, 0.1)
+            elif unknown_boundary_gain > 0.65:
+                r, g, b = (0.0, 0.95, 1.0)
+            elif frontier_gain > 0.75 or coverage_gain > 0.75:
                 r, g, b = (0.0, 1.0, 0.35)
             else:
                 r, g, b = (0.15, 0.75, 1.0) if revisit < 0.2 else (1.0, 0.75, 0.1)
@@ -427,6 +502,8 @@ class AirExplorationStub(Node):
                 color = (0.8, 0.1, 0.9)
             elif reason == 'low_gain_blacklist':
                 color = (0.45, 0.0, 0.7)
+            elif reason == 'rejected_occupied':
+                color = (1.0, 0.0, 0.0)
             else:
                 color = (1.0, 0.1, 0.1)
             markers.append(self._candidate_marker(marker_id, cand, color[0], color[1], color[2], 0.35, now, scale=0.14))
@@ -474,6 +551,8 @@ class AirExplorationStub(Node):
     def _publish_status(self, extra='OK'):
         msg = String()
         age = time.time() - self.last_goal_time if self.last_goal_time else -1.0
+        octomap_active = self._octomap_active()
+        planning_mode = 'P2E_air_octomap_frontier_quality' if octomap_active else 'P2D_air_frontier_quality'
         if self.odom is None:
             state = 'WAITING_FOR_ODOM'
         elif not self.points:
@@ -487,14 +566,18 @@ class AirExplorationStub(Node):
             f'boundary_received={self.boundary_received} candidate_count={self.last_candidate_count or int(self.get_parameter("candidate_count").value)} '
             f'valid_candidate_count={self.last_valid_candidate_count} selected_score={self.last_selected_score:.3f} '
             f'coverage_gain_estimate={self.last_coverage_gain_estimate:.3f} frontier_ring_score={self.last_frontier_ring_score:.3f} '
+            f'octomap_frontier_gain={self.last_octomap_frontier_gain:.3f} unknown_boundary_gain={self.last_unknown_boundary_gain:.3f} '
+            f'occupied_penalty={self.last_occupied_penalty:.3f} '
             f'selected_goal={self.last_goal} held_goal={str(self.last_held_goal).lower()} switched_goal={str(self.last_switched_goal).lower()} '
             f'blacklist_size={len(self.blacklist)} low_gain_blacklist_size={len(self.low_gain_blacklist)} selected_sector={self.last_selected_sector} '
             f'goal_progress_distance={self.last_goal_progress_distance:.3f} '
             f'rejected_by_collision_count={self.last_rejected_collision} '
+            f'rejected_by_occupied_count={self.last_rejected_occupied} '
             f'rejected_by_revisit_count={self.last_rejected_revisit} rejected_by_blacklist_count={self.last_rejected_blacklist} '
             f'rejected_by_low_gain_count={self.last_rejected_low_gain} rejected_by_low_gain_blacklist_count={self.last_rejected_low_gain} '
             f'held_goal_count={self.held_goal_count} switched_goal_count={self.switched_goal_count} '
-            f'map_point_count={len(self.points)} planning_mode=P2D_air_frontier_quality last_goal_age_sec={age:.2f}'
+            f'map_point_count={len(self.points)} backend_mode={self.backend_mode} '
+            f'octomap_adaptive_scoring={str(octomap_active).lower()} planning_mode={planning_mode} last_goal_age_sec={age:.2f}'
         )
         self.status_pub.publish(msg)
         if self.last_candidate_marker_array is not None:
@@ -505,6 +588,22 @@ class AirExplorationStub(Node):
         if self.last_selected_goal_marker is not None:
             self.last_selected_goal_marker.header.stamp = self.get_clock().now().to_msg()
             self.selected_goal_marker_pub.publish(self.last_selected_goal_marker)
+
+    @staticmethod
+    def _parse_key_values(text):
+        out = {}
+        for token in text.split():
+            if '=' in token:
+                key, value = token.split('=', 1)
+                out[key] = value
+        return out
+
+    @staticmethod
+    def _float(value, default=0.0):
+        try:
+            return float(value)
+        except Exception:
+            return default
 
 
 def main(args=None):
