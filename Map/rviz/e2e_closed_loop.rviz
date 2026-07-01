@@ -1,0 +1,85 @@
+Panels:
+  - Class: rviz_common/Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: bimodal_points
+      Topic:
+        Value: /bimodal/points
+      Size (m): 0.03
+      Style: Points
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: bimodal_map_3d
+      Topic:
+        Value: /bimodal/map_3d
+      Size (m): 0.04
+      Style: Points
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: bimodal_esdf
+      Topic:
+        Value: /bimodal/esdf
+      Size (m): 0.05
+      Style: Points
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: exploration_boundary
+      Topic:
+        Value: /bimodal/exploration_boundary
+    - Class: rviz_default_plugins/Path
+      Enabled: true
+      Name: air_trajectory
+      Topic:
+        Value: /air/trajectory
+    - Class: rviz_default_plugins/Path
+      Enabled: true
+      Name: ground_path
+      Topic:
+        Value: /ground/path
+    - Class: rviz_default_plugins/Path
+      Enabled: true
+      Name: bimodal_active_path
+      Topic:
+        Value: /bimodal/active_path
+    - Class: rviz_default_plugins/Path
+      Enabled: true
+      Name: bimodal_executed_path
+      Topic:
+        Value: /bimodal/executed_path
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: ground_frontier_candidates
+      Topic:
+        Value: /ground/frontier_candidates
+    - Class: rviz_default_plugins/Pose
+      Enabled: true
+      Name: air_exploration_goal
+      Topic:
+        Value: /air/exploration_goal
+    - Class: rviz_default_plugins/Pose
+      Enabled: true
+      Name: ground_exploration_goal
+      Topic:
+        Value: /ground/exploration_goal
+    - Class: rviz_default_plugins/Pose
+      Enabled: true
+      Name: bimodal_active_goal
+      Topic:
+        Value: /bimodal/active_goal
+  Enabled: true
+  Global Options:
+    Fixed Frame: map
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+  Value: true
+Window Geometry:
+  Height: 900
+  Width: 1400

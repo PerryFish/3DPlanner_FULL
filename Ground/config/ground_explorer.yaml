@@ -1,0 +1,33 @@
+ground_3d_frontier_node:
+  ros__parameters:
+    ground_z: 0.2
+    candidate_z: 0.2
+    min_goal_distance: 1.2
+    max_goal_distance: 5.5
+    safety_radius: 0.45
+    boundary_min_x: -10.0
+    boundary_max_x: 10.0
+    boundary_min_y: -10.0
+    boundary_max_y: 10.0
+    boundary_min_z: 0.0
+    boundary_max_z: 3.0
+    candidate_grid_resolution: 0.8
+    update_period_sec: 5.0
+    unknown_gain_weight: 3.0
+    frontier_gain_weight: 2.0
+    sector_balance_weight: 1.0
+    distance_gain_weight: 0.6
+    obstacle_penalty_weight: 3.0
+    revisit_penalty_weight: 2.5
+    max_candidate_count: 180
+    selected_goal_hold_sec: 12.0
+    visual_exploration_mode: true
+    max_candidate_markers: 180
+    min_goal_separation: 1.2
+    blacklist_radius: 1.0
+    blacklist_ttl_sec: 60.0
+    frontier_bias_enabled: true
+    sector_balance_enabled: true
+    sector_count: 8
+    goal_switch_min_improvement: 0.25
+    path_collision_check_enabled: true

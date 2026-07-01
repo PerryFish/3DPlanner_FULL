@@ -1,0 +1,18 @@
+virtual_sensor_node:
+  ros__parameters:
+    publish_rate_hz: 5.0
+    publish_odom: true
+    use_external_odom: false
+    external_odom_topic: "/bimodal/odom"
+    robot_mode_test: AIR
+    air_start_z: 1.5
+    ground_start_z: 0.2
+    sensor_range: 5.0
+    sensor_fov_deg: 120.0
+    publish_world_full_cloud: false
+    publish_local_sensor_cloud: true
+    world_size_x: 20.0
+    world_size_y: 20.0
+    world_size_z: 3.0
+    depth_width: 64
+    depth_height: 48

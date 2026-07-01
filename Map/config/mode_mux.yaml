@@ -1,0 +1,12 @@
+simple_mode_commander_node:
+  ros__parameters:
+    enable_auto_switch: true
+    initial_mode: "AIR"
+    switch_period_sec: 20.0
+    publish_period_sec: 1.0
+
+bimodal_mode_mux_node:
+  ros__parameters:
+    republish_period_sec: 1.0
+    valid_modes: ["AIR", "GROUND", "IDLE"]
+    active_path_min_pose_count: 2

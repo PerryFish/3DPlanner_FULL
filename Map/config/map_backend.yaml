@@ -1,0 +1,27 @@
+map_backend_bridge:
+  ros__parameters:
+    backend_mode: "fallback"
+    external_map_cloud_topic: "/external/map_3d"
+    external_esdf_cloud_topic: "/external/esdf"
+    external_boundary_topic: "/external/exploration_boundary"
+
+    nvblox_map_cloud_topic: "/nvblox_node/static_map_slice"
+    nvblox_esdf_topic: "/nvblox_node/esdf_pointcloud"
+    nvblox_mesh_topic: "/nvblox_node/mesh"
+
+    rtabmap_cloud_topic: "/rtabmap/cloud_map"
+    rtabmap_odom_topic: "/rtabmap/odom"
+
+    octomap_cloud_topic: "/octomap_point_cloud_centers"
+
+    default_boundary_min_x: -10.0
+    default_boundary_max_x: 10.0
+    default_boundary_min_y: -10.0
+    default_boundary_max_y: 10.0
+    default_boundary_min_z: 0.0
+    default_boundary_max_z: 3.0
+
+    status_publish_period_sec: 1.0
+    max_map_age_sec: 3.0
+    min_map_point_count: 10
+    require_frame_id_map: true

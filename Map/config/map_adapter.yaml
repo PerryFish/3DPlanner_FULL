@@ -1,0 +1,22 @@
+fallback_3d_map_adapter_node:
+  ros__parameters:
+    voxel_resolution: 0.2
+    accumulate_map: true
+    voxel_size: 0.2
+    max_accumulated_points: 200000
+    map_publish_period_sec: 1.0
+    min_input_points: 10
+    coverage_resolution: 0.5
+    boundary_min_x: -10.0
+    boundary_max_x: 10.0
+    boundary_min_y: -10.0
+    boundary_max_y: 10.0
+    boundary_min_z: 0.0
+    boundary_max_z: 3.0
+    coverage_boundary_min_x: -10.0
+    coverage_boundary_max_x: 10.0
+    coverage_boundary_min_y: -10.0
+    coverage_boundary_max_y: 10.0
+    coverage_boundary_min_z: 0.0
+    coverage_boundary_max_z: 3.0
+    status_publish_period_sec: 1.0

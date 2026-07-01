@@ -1,0 +1,27 @@
+air_exploration_stub_node:
+  ros__parameters:
+    air_goal_z: 1.5
+    safety_radius: 0.5
+    update_period_sec: 5.0
+    max_candidate_count: 96
+    visual_exploration_mode: true
+    goal_hold_sec: 10.0
+    min_goal_separation: 1.5
+    blacklist_radius: 1.0
+    blacklist_ttl_sec: 45.0
+    sector_balance_enabled: true
+    sector_count: 8
+    frontier_bias_enabled: true
+    coverage_gain_radius: 2.0
+    candidate_count: 120
+    max_candidate_markers: 120
+    min_goal_distance: 1.5
+    max_goal_distance: 6.0
+    unknown_gain_weight: 3.0
+    forward_gain_weight: 0.8
+    distance_gain_weight: 0.5
+    frontier_gain_weight: 2.0
+    sector_balance_weight: 1.0
+    obstacle_penalty_weight: 3.0
+    revisit_penalty_weight: 2.5
+    goal_switch_min_improvement: 0.25
