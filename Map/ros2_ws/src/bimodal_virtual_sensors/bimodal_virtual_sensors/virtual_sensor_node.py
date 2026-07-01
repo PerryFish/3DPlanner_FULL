@@ -18,6 +18,7 @@ class VirtualSensorNode(Node):
         self.declare_parameter('publish_rate_hz', 5.0)
         self.declare_parameter('publish_odom', True)
         self.declare_parameter('publish_tf', True)
+        self.declare_parameter('publish_points', True)
         self.declare_parameter('use_external_odom', False)
         self.declare_parameter('external_odom_topic', '/bimodal/odom')
         self.declare_parameter('robot_mode_test', 'AIR')
@@ -36,6 +37,7 @@ class VirtualSensorNode(Node):
 
         self.publish_odom_enabled = bool(self.get_parameter('publish_odom').value)
         self.publish_tf_enabled = bool(self.get_parameter('publish_tf').value)
+        self.publish_points_enabled = bool(self.get_parameter('publish_points').value)
         self.use_external_odom = bool(self.get_parameter('use_external_odom').value)
         self.pose_x = 0.0
         self.pose_y = 0.0
@@ -150,7 +152,8 @@ class VirtualSensorNode(Node):
         local_points = self._select_visible_points()
         self.last_local_count = len(local_points)
         header = Header(stamp=now, frame_id='map')
-        self.points_pub.publish(point_cloud2.create_cloud_xyz32(header, local_points))
+        if self.publish_points_enabled:
+            self.points_pub.publish(point_cloud2.create_cloud_xyz32(header, local_points))
         if bool(self.get_parameter('publish_world_gt_cloud').value):
             self.world_gt_pub.publish(point_cloud2.create_cloud_xyz32(header, self.world_points))
         if self.odom_pub is not None:
@@ -294,6 +297,7 @@ class VirtualSensorNode(Node):
         self.get_logger().info(
             f'pose=({self.pose_x:.2f},{self.pose_y:.2f},{self.pose_z:.2f}) '
             f'local_cloud_point_count={self.last_local_count} '
+            f'publish_points_enabled={self.publish_points_enabled} '
             f'publish_odom_enabled={self.publish_odom_enabled} publish_tf_enabled={self.publish_tf_enabled} '
             f'use_external_odom={self.use_external_odom}'
         )

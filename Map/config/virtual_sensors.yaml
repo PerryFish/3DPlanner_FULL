@@ -1,6 +1,7 @@
 virtual_sensor_node:
   ros__parameters:
     publish_rate_hz: 5.0
+    publish_points: true
     publish_odom: true
     use_external_odom: false
     external_odom_topic: "/bimodal/odom"

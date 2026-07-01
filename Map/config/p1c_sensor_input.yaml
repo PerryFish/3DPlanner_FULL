@@ -1,0 +1,33 @@
+real_sensor_pointcloud_bridge_node:
+  ros__parameters:
+    sensor_input_mode: "external_pointcloud"
+    input_topic: "/points_raw"
+    output_topic: "/bimodal/points"
+    input_topics:
+      - "/camera/depth/points"
+      - "/lidar/points"
+      - "/points_raw"
+      - "/livox/lidar"
+      - "/velodyne_points"
+      - "/ouster/points"
+      - "/realsense/depth/color/points"
+    selected_source: "/points_raw"
+    target_frame: "map"
+    use_tf_transform: false
+    passthrough_frame_if_tf_missing: true
+    min_range_m: 0.05
+    max_range_m: 30.0
+    max_points_per_cloud: 20000
+    voxel_downsample_leaf_size: 0.05
+    publish_rate_limit_hz: 10.0
+    input_timeout_sec: 2.0
+    enable_diagnostics: true
+    preserve_real_header_stamp: true
+
+synthetic_external_pointcloud_publisher_node:
+  ros__parameters:
+    output_topic: "/points_raw"
+    frame_id: "lidar_link"
+    publish_rate_hz: 5.0
+    point_count: 1200
+    range_m: 8.0

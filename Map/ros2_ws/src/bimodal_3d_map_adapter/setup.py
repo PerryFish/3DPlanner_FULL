@@ -20,5 +20,7 @@ setup(
         'fallback_3d_map_adapter_node = bimodal_3d_map_adapter.fallback_3d_map_adapter_node:main',
         'map_backend_bridge_node = bimodal_3d_map_adapter.map_backend_bridge_node:main',
         'octomap_pointcloud_backend_node = bimodal_3d_map_adapter.octomap_pointcloud_backend_node:main',
+        'real_sensor_pointcloud_bridge_node = bimodal_3d_map_adapter.real_sensor_pointcloud_bridge_node:main',
+        'synthetic_external_pointcloud_publisher_node = bimodal_3d_map_adapter.synthetic_external_pointcloud_publisher_node:main',
     ]},
 )
