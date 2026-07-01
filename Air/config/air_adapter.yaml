@@ -5,14 +5,15 @@ air_exploration_stub_node:
     update_period_sec: 5.0
     max_candidate_count: 96
     visual_exploration_mode: true
-    goal_hold_sec: 10.0
-    min_goal_separation: 1.5
+    goal_hold_sec: 12.0
+    min_goal_separation: 2.0
     blacklist_radius: 1.0
     blacklist_ttl_sec: 45.0
     sector_balance_enabled: true
     sector_count: 8
     frontier_bias_enabled: true
     coverage_gain_radius: 2.0
+    coverage_gain_weight: 2.5
     candidate_count: 120
     max_candidate_markers: 120
     min_goal_distance: 1.5
@@ -24,4 +25,8 @@ air_exploration_stub_node:
     sector_balance_weight: 1.0
     obstacle_penalty_weight: 3.0
     revisit_penalty_weight: 2.5
-    goal_switch_min_improvement: 0.25
+    goal_switch_min_improvement: 0.4
+    low_gain_window_sec: 15.0
+    min_coverage_gain_per_goal: 0.005
+    low_gain_blacklist_ttl_sec: 90.0
+    recent_goal_history_size: 50

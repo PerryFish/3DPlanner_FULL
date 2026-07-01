@@ -15,6 +15,8 @@ ground_3d_frontier_node:
     update_period_sec: 5.0
     unknown_gain_weight: 3.0
     frontier_gain_weight: 2.0
+    coverage_gain_weight: 2.5
+    path_usefulness_weight: 1.5
     sector_balance_weight: 1.0
     distance_gain_weight: 0.6
     obstacle_penalty_weight: 3.0
@@ -29,5 +31,10 @@ ground_3d_frontier_node:
     frontier_bias_enabled: true
     sector_balance_enabled: true
     sector_count: 8
-    goal_switch_min_improvement: 0.25
+    goal_switch_min_improvement: 0.4
     path_collision_check_enabled: true
+    low_gain_window_sec: 20.0
+    min_coverage_gain_per_goal: 0.004
+    low_gain_blacklist_ttl_sec: 120.0
+    min_useful_path_length: 0.8
+    recent_goal_history_size: 50
