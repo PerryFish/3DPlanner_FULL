@@ -1,0 +1,43 @@
+octomap_pointcloud_backend:
+  ros__parameters:
+    backend_mode: "octomap_style_voxel"
+    input_points_topic: "/bimodal/points"
+    odom_topic: "/bimodal/odom"
+    map_frame: "map"
+    resolution: 0.2
+    max_occupied_voxels: 300000
+    publish_period_sec: 1.0
+    boundary_min_x: -10.0
+    boundary_max_x: 10.0
+    boundary_min_y: -10.0
+    boundary_max_y: 10.0
+    boundary_min_z: 0.0
+    boundary_max_z: 3.0
+    coverage_resolution: 0.5
+    esdf_is_fallback: true
+    marker_max_count: 5000
+
+octomap_pointcloud_backend_node:
+  ros__parameters:
+    backend_mode: "octomap_style_voxel"
+    input_points_topic: "/bimodal/points"
+    odom_topic: "/bimodal/odom"
+    map_frame: "map"
+    resolution: 0.2
+    max_occupied_voxels: 300000
+    publish_period_sec: 1.0
+    boundary_min_x: -10.0
+    boundary_max_x: 10.0
+    boundary_min_y: -10.0
+    boundary_max_y: 10.0
+    boundary_min_z: 0.0
+    boundary_max_z: 3.0
+    coverage_resolution: 0.5
+    esdf_is_fallback: true
+    marker_max_count: 5000
+
+octomap_server:
+  ros__parameters:
+    resolution: 0.2
+    frame_id: "map"
+    sensor_model.max_range: 5.0

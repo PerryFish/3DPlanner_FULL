@@ -19,5 +19,6 @@ setup(
     entry_points={'console_scripts': [
         'fallback_3d_map_adapter_node = bimodal_3d_map_adapter.fallback_3d_map_adapter_node:main',
         'map_backend_bridge_node = bimodal_3d_map_adapter.map_backend_bridge_node:main',
+        'octomap_pointcloud_backend_node = bimodal_3d_map_adapter.octomap_pointcloud_backend_node:main',
     ]},
 )
