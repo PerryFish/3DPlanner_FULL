@@ -1,0 +1,83 @@
+ground_3d_frontier_node:
+  ros__parameters:
+    planner_mode: "ground_3d_frontier_v0"
+    ground_quality_profile: "p4b_optimized"
+    enable_stub_fallback: true
+
+    # Shared 3D map projection bounds and ground-constrained candidate height.
+    ground_z: 0.2
+    candidate_z: 0.2
+    ground_base_height_m: 0.2
+    ground_max_step_height_m: 0.35
+    min_goal_distance: 1.2
+    max_goal_distance: 6.0
+    safety_radius: 0.42
+    ground_min_clearance_m: 0.42
+    boundary_min_x: -10.0
+    boundary_max_x: 10.0
+    boundary_min_y: -10.0
+    boundary_max_y: 10.0
+    boundary_min_z: 0.0
+    boundary_max_z: 3.0
+
+    # P4B multi-radius, multi-sector candidate generation.
+    candidate_grid_resolution: 0.8
+    update_period_sec: 5.0
+    ground_candidate_radii: [1.5, 2.5, 4.0, 6.0]
+    ground_candidate_yaw_samples: 24
+    ground_min_candidate_separation_m: 0.45
+    ground_max_candidate_count: 384
+    max_candidate_count: 384
+    ground_sector_balance_enable: true
+    ground_expand_radius_on_low_gain: true
+    ground_local_escape_enable: true
+    ground_sector_escape_enable: true
+    sector_balance_enabled: true
+    sector_count: 8
+
+    # P4B candidate score terms.
+    unknown_gain_weight: 3.0
+    frontier_gain_weight: 2.4
+    unknown_boundary_weight: 2.6
+    coverage_gain_weight: 2.8
+    path_usefulness_weight: 1.7
+    sector_balance_weight: 1.1
+    distance_gain_weight: 0.35
+    novelty_gain_weight: 1.2
+    clearance_gain_weight: 1.0
+    local_escape_gain_weight: 0.8
+    obstacle_penalty_weight: 2.6
+    occupied_penalty_weight: 4.0
+    near_obstacle_penalty_weight: 1.2
+    path_collision_penalty_weight: 2.8
+    revisit_penalty_weight: 2.4
+    stale_region_penalty_weight: 1.0
+    path_length_penalty_weight: 0.45
+    oscillation_penalty_weight: 1.4
+
+    # Goal lifecycle and local-minimum recovery.
+    selected_goal_hold_sec: 8.0
+    ground_goal_min_hold_sec: 3.0
+    ground_goal_max_hold_sec: 32.0
+    goal_switch_min_improvement: 0.25
+    low_gain_window_sec: 16.0
+    ground_low_gain_retire_sec: 18.0
+    ground_no_progress_timeout_sec: 22.0
+    ground_stale_path_timeout_sec: 35.0
+    min_coverage_gain_per_goal: 0.003
+    blacklist_radius: 1.0
+    blacklist_ttl_sec: 60.0
+    ground_blacklist_radius_m: 1.0
+    ground_blacklist_duration_sec: 90.0
+    low_gain_blacklist_ttl_sec: 120.0
+    min_goal_separation: 1.2
+    min_useful_path_length: 0.8
+    recent_goal_history_size: 50
+
+    # Diagnostics and visualization.
+    visual_exploration_mode: true
+    max_candidate_markers: 220
+    frontier_bias_enabled: true
+    path_collision_check_enabled: true
+    octomap_adaptive_scoring: true
+    ground_endpoint_to_goal_max_m: 0.5

@@ -571,6 +571,7 @@ class AirExplorationStub(Node):
         self.last_rejected_collision = rejected_collision
         self.last_rejected_revisit = rejected_revisit
         self.last_rejected_blacklist = rejected_blacklist
+        self.failure_reason = 'NONE'
         self._publish_candidate_markers(scored, rejected, best)
         self._publish_goal_and_path(selected)
         self._publish_status()
