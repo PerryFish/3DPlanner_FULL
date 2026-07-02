@@ -1,0 +1,190 @@
+Panels:
+  - Class: rviz_common/Displays
+  - Class: rviz_common/Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Ground Grid
+      Plane: XY
+      Cell Size: 1
+      Color: 120; 120; 120
+      Alpha: 0.35
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF Tree
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Update Interval: 0
+    - Class: rviz_common/Group
+      Enabled: true
+      Name: 01 Sensing And Realistic Scene
+      Displays:
+        - Class: rviz_default_plugins/PointCloud2
+          Enabled: true
+          Name: Incoming cloud /bimodal/points
+          Topic:
+            Value: /bimodal/points
+          Size (m): 0.035
+          Style: Points
+          Color Transformer: FlatColor
+          Color: 80; 220; 255
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Realistic room/corridor structure
+          Topic:
+            Value: /bimodal/demo_world_structure_markers
+    - Class: rviz_common/Group
+      Enabled: true
+      Name: 02 Shared 3D Map And Exploration Boundary
+      Displays:
+        - Class: rviz_default_plugins/PointCloud2
+          Enabled: true
+          Name: Built 3D occupied voxel map
+          Topic:
+            Value: /bimodal/map_3d
+          Size (m): 0.055
+          Style: Boxes
+          Color Transformer: FlatColor
+          Color: 60; 210; 90
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Occupied voxel cube overlay
+          Topic:
+            Value: /bimodal/octomap_occupied_markers
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Exploration boundary
+          Topic:
+            Value: /bimodal/exploration_boundary
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Explored coverage markers
+          Topic:
+            Value: /bimodal/coverage_markers
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Unknown/frontier voxel hints
+          Topic:
+            Value: /bimodal/octomap_frontier_markers
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Map backend status
+          Topic:
+            Value: /bimodal/map_status_marker
+    - Class: rviz_common/Group
+      Enabled: true
+      Name: 03 Air And Ground Candidate Layers
+      Displays:
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Air candidates / candidate score layer
+          Topic:
+            Value: /air/candidate_markers
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Air selected goal marker
+          Topic:
+            Value: /air/selected_goal_marker
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Ground 3D frontier candidates
+          Topic:
+            Value: /ground/frontier_candidates
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Rejected candidate overlay
+          Topic:
+            Value: /bimodal/rejected_candidate_markers
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Selected bimodal active goal
+          Topic:
+            Value: /bimodal/selected_goal_marker
+    - Class: rviz_common/Group
+      Enabled: true
+      Name: 04 Mode Mux Paths And Fake Execution
+      Displays:
+        - Class: rviz_default_plugins/Pose
+          Enabled: true
+          Name: Active goal pose
+          Topic:
+            Value: /bimodal/active_goal
+        - Class: rviz_default_plugins/Path
+          Enabled: true
+          Name: Active path selected by mode mux
+          Topic:
+            Value: /bimodal/active_path
+          Line Style: Lines
+          Line Width: 0.08
+          Color: 255; 255; 0
+        - Class: rviz_default_plugins/Path
+          Enabled: true
+          Name: Executed fake path trail
+          Topic:
+            Value: /bimodal/executed_path
+          Line Style: Lines
+          Line Width: 0.05
+          Color: 255; 255; 255
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Robot marker
+          Topic:
+            Value: /bimodal/robot_marker
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Executor direction marker
+          Topic:
+            Value: /bimodal/executor_marker
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Executor status text
+          Topic:
+            Value: /bimodal/executor_status_marker
+    - Class: rviz_common/Group
+      Enabled: true
+      Name: 05 Explanation Legend And Status
+      Displays:
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Demo legend markers
+          Topic:
+            Value: /bimodal/demo_legend_markers
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Exploration state markers
+          Topic:
+            Value: /bimodal/exploration_state_markers
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Demo status text panel
+          Topic:
+            Value: /bimodal/demo_status_text
+  Enabled: true
+  Global Options:
+    Fixed Frame: map
+    Background Color: 28; 30; 34
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 18
+      Focal Point:
+        X: 1.5
+        Y: 0
+        Z: 1.2
+      Name: Explainable Orbit
+      Pitch: 0.72
+      Target Frame: map
+      Yaw: 5.45
+  Value: true
+Window Geometry:
+  Height: 980
+  Width: 1680

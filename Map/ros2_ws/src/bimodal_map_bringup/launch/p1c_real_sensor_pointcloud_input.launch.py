@@ -11,6 +11,8 @@ def generate_launch_description():
     sensor_input_mode = LaunchConfiguration('sensor_input_mode')
     input_topic = LaunchConfiguration('input_topic')
     enable_synthetic = LaunchConfiguration('enable_synthetic_pointcloud')
+    scene_profile = LaunchConfiguration('scene_profile')
+    enable_explainability_overlay = LaunchConfiguration('enable_explainability_overlay')
     backend_mode = LaunchConfiguration('backend_mode')
     mode_switch_period = LaunchConfiguration('mode_switch_period_sec')
     active_path_period = LaunchConfiguration('active_path_republish_period_sec')
@@ -27,6 +29,8 @@ def generate_launch_description():
         DeclareLaunchArgument('sensor_input_mode', default_value='external_pointcloud'),
         DeclareLaunchArgument('input_topic', default_value='/points_raw'),
         DeclareLaunchArgument('enable_synthetic_pointcloud', default_value='true'),
+        DeclareLaunchArgument('scene_profile', default_value='default_sparse'),
+        DeclareLaunchArgument('enable_explainability_overlay', default_value='false'),
         DeclareLaunchArgument('backend_mode', default_value='octomap_style_voxel'),
         DeclareLaunchArgument('mode_switch_period_sec', default_value='75.0'),
         DeclareLaunchArgument('active_path_republish_period_sec', default_value='1.0'),
@@ -56,7 +60,7 @@ def generate_launch_description():
             condition=IfCondition(enable_synthetic),
             parameters=[
                 '/home/nuaa/ZHY/3DPlanner_FULL/Map/config/p1c_sensor_input.yaml',
-                {'output_topic': input_topic},
+                {'output_topic': input_topic, 'scene_profile': scene_profile},
             ],
         ),
         Node(
@@ -115,6 +119,13 @@ def generate_launch_description():
                 'dynamic_tf_publish_hz': 20.0,
                 'static_tf_republish_period_sec': 2.0,
             }],
+        ),
+        Node(
+            package='bimodal_e2e_sim_tools',
+            executable='demo_explainability_overlay_node',
+            output='screen',
+            condition=IfCondition(enable_explainability_overlay),
+            parameters=[{'scene_profile': scene_profile}],
         ),
         Node(
             package='bimodal_e2e_sim_tools',

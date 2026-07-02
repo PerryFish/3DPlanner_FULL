@@ -20,5 +20,6 @@ setup(
         'fake_path_executor_node = bimodal_e2e_sim_tools.fake_path_executor_node:main',
         'e2e_metrics_logger_node = bimodal_e2e_sim_tools.e2e_metrics_logger_node:main',
         'visual_tf_guard_node = bimodal_e2e_sim_tools.visual_tf_guard_node:main',
+        'demo_explainability_overlay_node = bimodal_e2e_sim_tools.demo_explainability_overlay_node:main',
     ]},
 )

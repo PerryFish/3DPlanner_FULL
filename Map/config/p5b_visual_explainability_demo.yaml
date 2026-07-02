@@ -1,0 +1,42 @@
+p5b_visual_explainability_demo:
+  ros__parameters:
+    sensor_input_mode: "external_pointcloud"
+    selected_input_topic: "/points_raw"
+    bridge_output_topic: "/bimodal/points"
+    enable_synthetic_pointcloud: true
+    scene_profile: "realistic_room_corridor_v1"
+    map_backend_mode: "octomap_style_voxel"
+
+    air_planner_mode: "fuel_style_v0"
+    air_quality_profile: "p3b_optimized"
+    air_config_file: "/home/nuaa/ZHY/3DPlanner_FULL/Air/config/p3b_air_fuel_quality.yaml"
+
+    ground_planner_mode: "ground_3d_frontier_v0"
+    ground_quality_profile: "p4b_optimized"
+    ground_config_file: "/home/nuaa/ZHY/3DPlanner_FULL/Ground/config/p4b_ground_3d_quality.yaml"
+
+    mode_mux_enable: true
+    fake_executor_enable: true
+    tf_guard_enable: true
+    explainability_overlay_enable: true
+    rviz_enable: true
+
+    mode_switch_period_sec: 75.0
+    active_path_republish_period_sec: 1.0
+    rviz_config_file: "/home/nuaa/ZHY/3DPlanner_FULL/Map/rviz/p5b_explainable_bimodal_demo.rviz"
+
+    visual_topics:
+      points: "/bimodal/points"
+      map_3d: "/bimodal/map_3d"
+      coverage_markers: "/bimodal/coverage_markers"
+      world_structure_markers: "/bimodal/demo_world_structure_markers"
+      air_candidates: "/air/candidate_markers"
+      ground_candidates: "/ground/frontier_candidates"
+      selected_goal: "/bimodal/selected_goal_marker"
+      legend: "/bimodal/demo_legend_markers"
+      status_text: "/bimodal/demo_status_text"
+      active_path: "/bimodal/active_path"
+      executed_path: "/bimodal/executed_path"
+      robot_marker: "/bimodal/robot_marker"
+
+    supported_scene_profiles: ["default_sparse", "realistic_room_corridor_v1", "warehouse_obstacles_v1"]
