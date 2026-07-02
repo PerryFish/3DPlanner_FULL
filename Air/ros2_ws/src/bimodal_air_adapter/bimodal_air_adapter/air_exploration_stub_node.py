@@ -45,7 +45,12 @@ class AirExplorationStub(Node):
         self.declare_parameter('low_gain_blacklist_ttl_sec', 90.0)
         self.declare_parameter('recent_goal_history_size', 50)
         self.declare_parameter('octomap_adaptive_scoring', True)
+        self.declare_parameter('planner_mode', 'stub')
+        self.declare_parameter('enable_stub_fallback', True)
         self.declare_parameter('air_octomap_safety_radius', 0.6)
+        self.declare_parameter('fuel_style_z_min', 0.8)
+        self.declare_parameter('fuel_style_z_nominal', 1.4)
+        self.declare_parameter('fuel_style_z_max', 2.2)
         self.declare_parameter('unknown_boundary_weight', 2.0)
         self.declare_parameter('occupied_penalty_weight', 4.0)
         self.declare_parameter('low_gain_penalty_weight', 1.0)
@@ -89,6 +94,13 @@ class AirExplorationStub(Node):
         self.last_coverage_gain_estimate = 0.0
         self.last_goal_progress_distance = 0.0
         self.last_rejected_occupied = 0
+        self.selected_goal_count = 0
+        self.path_feasible_count = 0
+        self.path_infeasible_count = 0
+        self.path_length_sum = 0.0
+        self.endpoint_error_sum = 0.0
+        self.fallback_active = False
+        self.failure_reason = 'NONE'
         self.create_subscription(Odometry, '/bimodal/odom', self._odom_cb, 10)
         self.create_subscription(PointCloud2, '/bimodal/map_3d', self._map_cb, 10)
         self.create_subscription(String, '/bimodal/map_metrics', self._map_metrics_cb, 10)
@@ -136,7 +148,14 @@ class AirExplorationStub(Node):
 
     def _candidate_points(self):
         min_x, max_x, min_y, max_y, _, _ = self.boundary
-        z = float(self.get_parameter('air_goal_z').value)
+        if self._planner_mode() == 'fuel_style_v0':
+            z = self._clamp(
+                float(self.get_parameter('fuel_style_z_nominal').value),
+                float(self.get_parameter('fuel_style_z_min').value),
+                float(self.get_parameter('fuel_style_z_max').value),
+            )
+        else:
+            z = float(self.get_parameter('air_goal_z').value)
         count = int(self.get_parameter('candidate_count').value)
         pts = []
         rx, ry, _ = self._robot_xyz()
@@ -196,6 +215,13 @@ class AirExplorationStub(Node):
 
     def _octomap_active(self):
         return bool(self.get_parameter('octomap_adaptive_scoring').value) and self.backend_mode == 'octomap_style_voxel'
+
+    def _planner_mode(self):
+        mode = str(self.get_parameter('planner_mode').value).strip()
+        return mode if mode in ('stub', 'fuel_style_v0', 'external_wrapper_placeholder') else 'stub'
+
+    def _wrapper_active(self):
+        return self._planner_mode() == 'fuel_style_v0'
 
     def _occupied_penalty(self, candidate):
         cx, cy, cz = candidate
@@ -270,7 +296,10 @@ class AirExplorationStub(Node):
         self.last_switched_goal = False
         self.last_rejected_low_gain = 0
         self.last_rejected_occupied = 0
+        self.fallback_active = False
+        self.failure_reason = 'NONE'
         if self.odom is None or not self.points or not self.boundary_received:
+            self.failure_reason = 'WAITING_FOR_INPUT'
             self._publish_status()
             return
         if self.last_goal is not None and time.time() - self.last_goal_time < float(self.get_parameter('goal_hold_sec').value):
@@ -315,8 +344,19 @@ class AirExplorationStub(Node):
                 rejected_revisit += 1
                 rejected.append((cand, 'recent_goal'))
                 continue
+            if self._wrapper_active():
+                feasible, path_length, endpoint_error = self._path_feasibility(cand)
+                if not feasible:
+                    self.path_infeasible_count += 1
+                    rejected.append((cand, 'path_infeasible'))
+                    continue
+                self.path_feasible_count += 1
+                self.path_length_sum += path_length
+                self.endpoint_error_sum += endpoint_error
             scored.append((score, cand, clearance, revisit_penalty, frontier_gain, coverage_gain, unknown_boundary_gain, occupied_penalty))
         if not scored:
+            self.failure_reason = 'NO_VALID_WRAPPER_CANDIDATE' if self._wrapper_active() else 'NO_COLLISION_FREE_CANDIDATE'
+            self.fallback_active = self._wrapper_active() and bool(self.get_parameter('enable_stub_fallback').value)
             self.last_candidate_count = len(candidates)
             self.last_valid_candidate_count = 0
             self.last_rejected_collision = rejected_collision
@@ -347,6 +387,7 @@ class AirExplorationStub(Node):
             self.switched_goal_count += 1
         self.last_goal = selected
         self.last_goal_time = time.time()
+        self.selected_goal_count += 1
         self.active_goal_monitor = {
             'goal': selected,
             'start_time': time.time(),
@@ -366,6 +407,29 @@ class AirExplorationStub(Node):
         self._publish_candidate_markers(scored, rejected, best)
         self._publish_goal_and_path(selected)
         self._publish_status()
+
+    def _path_feasibility(self, selected):
+        rx, ry, rz = self._robot_xyz()
+        gx, gy, gz = selected
+        path_length = math.dist((rx, ry, rz), selected)
+        endpoint_error = 0.0
+        if gz < float(self.get_parameter('fuel_style_z_min').value) or gz > float(self.get_parameter('fuel_style_z_max').value):
+            return False, path_length, endpoint_error
+        if self._line_collision_risk(rx, ry, rz, gx, gy, gz):
+            return False, path_length, endpoint_error
+        return True, path_length, endpoint_error
+
+    def _line_collision_risk(self, sx, sy, sz, gx, gy, gz):
+        steps = max(int(math.dist((sx, sy, sz), (gx, gy, gz)) / max(self.map_resolution, 0.2)), 8)
+        safety = float(self.get_parameter('air_octomap_safety_radius').value)
+        for i in range(steps + 1):
+            t = i / steps
+            x = sx + (gx - sx) * t
+            y = sy + (gy - sy) * t
+            z = sz + (gz - sz) * t
+            if self._clearance((x, y, z)) < safety:
+                return True
+        return False
 
     def _frontier_gain(self, candidate):
         cx, cy, cz = candidate
@@ -552,7 +616,8 @@ class AirExplorationStub(Node):
         msg = String()
         age = time.time() - self.last_goal_time if self.last_goal_time else -1.0
         octomap_active = self._octomap_active()
-        planning_mode = 'P2E_air_octomap_frontier_quality' if octomap_active else 'P2D_air_frontier_quality'
+        planner_mode = self._planner_mode()
+        planning_mode = 'P3A_air_fuel_style_v0' if planner_mode == 'fuel_style_v0' else ('P2E_air_octomap_frontier_quality' if octomap_active else 'P2D_air_frontier_quality')
         if self.odom is None:
             state = 'WAITING_FOR_ODOM'
         elif not self.points:
@@ -561,8 +626,16 @@ class AirExplorationStub(Node):
             state = 'WAITING_FOR_BOUNDARY'
         else:
             state = extra
+        path_length_avg = self.path_length_sum / max(self.path_feasible_count, 1)
+        endpoint_error_avg = self.endpoint_error_sum / max(self.path_feasible_count, 1)
+        repeat_ratio = 0.0
+        if self.visited_goals:
+            keys = {(round(x), round(y)) for x, y in self.visited_goals}
+            repeat_ratio = max(0.0, 1.0 - len(keys) / max(len(self.visited_goals), 1))
         msg.data = (
             f'{state} odom_received={self.odom is not None} map_received={bool(self.points)} '
+            f'planner_mode={planner_mode} air_planner_mode={planner_mode} '
+            f'fallback_active={str(self.fallback_active).lower()} failure_reason={self.failure_reason} '
             f'boundary_received={self.boundary_received} candidate_count={self.last_candidate_count or int(self.get_parameter("candidate_count").value)} '
             f'valid_candidate_count={self.last_valid_candidate_count} selected_score={self.last_selected_score:.3f} '
             f'coverage_gain_estimate={self.last_coverage_gain_estimate:.3f} frontier_ring_score={self.last_frontier_ring_score:.3f} '
@@ -576,6 +649,13 @@ class AirExplorationStub(Node):
             f'rejected_by_revisit_count={self.last_rejected_revisit} rejected_by_blacklist_count={self.last_rejected_blacklist} '
             f'rejected_by_low_gain_count={self.last_rejected_low_gain} rejected_by_low_gain_blacklist_count={self.last_rejected_low_gain} '
             f'held_goal_count={self.held_goal_count} switched_goal_count={self.switched_goal_count} '
+            f'air_candidate_count={self.last_candidate_count or int(self.get_parameter("candidate_count").value)} '
+            f'air_valid_candidate_count={self.last_valid_candidate_count} air_selected_goal_count={self.selected_goal_count} '
+            f'air_path_feasible_count={self.path_feasible_count} air_path_infeasible_count={self.path_infeasible_count} '
+            f'air_goal_blacklist_count={len(self.blacklist) + len(self.low_gain_blacklist)} '
+            f'air_repeat_goal_ratio={repeat_ratio:.3f} air_frontier_gain_max={self.last_octomap_frontier_gain:.3f} '
+            f'air_unknown_boundary_gain_max={self.last_unknown_boundary_gain:.3f} '
+            f'air_path_length_avg={path_length_avg:.3f} air_endpoint_to_goal_distance_avg={endpoint_error_avg:.3f} '
             f'map_point_count={len(self.points)} backend_mode={self.backend_mode} '
             f'octomap_adaptive_scoring={str(octomap_active).lower()} planning_mode={planning_mode} last_goal_age_sec={age:.2f}'
         )
@@ -604,6 +684,10 @@ class AirExplorationStub(Node):
             return float(value)
         except Exception:
             return default
+
+    @staticmethod
+    def _clamp(value, low, high):
+        return max(low, min(high, value))
 
 
 def main(args=None):

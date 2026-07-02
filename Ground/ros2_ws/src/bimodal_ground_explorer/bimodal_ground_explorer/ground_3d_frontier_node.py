@@ -30,6 +30,7 @@ class Ground3DFrontier(Node):
             'low_gain_window_sec': 20.0, 'min_coverage_gain_per_goal': 0.004,
             'low_gain_blacklist_ttl_sec': 120.0, 'min_useful_path_length': 0.8,
             'recent_goal_history_size': 50,
+            'planner_mode': 'stub', 'enable_stub_fallback': True,
             'octomap_adaptive_scoring': True, 'unknown_boundary_weight': 2.0,
             'occupied_penalty_weight': 4.0, 'path_collision_penalty_weight': 2.5,
             'oscillation_penalty_weight': 1.5,
@@ -77,6 +78,13 @@ class Ground3DFrontier(Node):
         self.last_unknown_boundary_gain = 0.0
         self.last_occupied_penalty = 0.0
         self.last_rejected_occupied = 0
+        self.selected_goal_count = 0
+        self.path_feasible_count = 0
+        self.path_infeasible_count = 0
+        self.path_length_sum = 0.0
+        self.endpoint_error_sum = 0.0
+        self.fallback_active = False
+        self.failure_reason = 'NONE'
         self.create_subscription(Odometry, '/bimodal/odom', self._odom_cb, 10)
         self.create_subscription(PointCloud2, '/bimodal/map_3d', self._map_cb, 10)
         self.create_subscription(String, '/bimodal/map_metrics', self._map_metrics_cb, 10)
@@ -169,6 +177,13 @@ class Ground3DFrontier(Node):
 
     def _octomap_active(self):
         return bool(self.get_parameter('octomap_adaptive_scoring').value) and self.backend_mode == 'octomap_style_voxel'
+
+    def _planner_mode(self):
+        mode = str(self.get_parameter('planner_mode').value).strip()
+        return mode if mode in ('stub', 'ground_3d_frontier_v0', 'external_wrapper_placeholder') else 'stub'
+
+    def _wrapper_active(self):
+        return self._planner_mode() == 'ground_3d_frontier_v0'
 
     def _occupied_penalty(self, x, y, z, clearance):
         safety = float(self.get_parameter('safety_radius').value)
@@ -305,12 +320,16 @@ class Ground3DFrontier(Node):
         self.last_switched_goal = False
         self.last_rejected_low_gain = 0
         self.last_rejected_occupied = 0
+        self.fallback_active = False
+        self.failure_reason = 'NONE'
         if self.odom is None:
             self.status = 'WAITING_FOR_ODOM'
+            self.failure_reason = 'WAITING_FOR_ODOM'
             self._publish_status()
             return
         if not self.points:
             self.status = 'WAITING_FOR_MAP'
+            self.failure_reason = 'WAITING_FOR_MAP'
             self._publish_status()
             return
         if self._should_hold_goal():
@@ -375,6 +394,11 @@ class Ground3DFrontier(Node):
                     y += res
                     continue
                 collision_risk = bool(self.get_parameter('path_collision_check_enabled').value) and self._line_collision_risk(rx, ry, float(self.odom.pose.pose.position.z), x, y, candidate_z)
+                if self._wrapper_active() and collision_risk:
+                    self.path_infeasible_count += 1
+                    rejected.append((x, y, candidate_z, 'path_infeasible'))
+                    y += res
+                    continue
                 path_usefulness = self._path_usefulness(x, y, candidate_z, d, collision_risk)
                 if d < float(self.get_parameter('min_useful_path_length').value) and coverage_gain < 0.20:
                     rejected_collision += 1
@@ -397,11 +421,17 @@ class Ground3DFrontier(Node):
                 if collision_risk:
                     score -= 2.0
                     rejected.append((x, y, candidate_z, 'path_collision_risk'))
+                if self._wrapper_active():
+                    self.path_feasible_count += 1
+                    self.path_length_sum += math.dist((rx, ry, float(self.odom.pose.pose.position.z)), (x, y, candidate_z))
+                    self.endpoint_error_sum += 0.0
                 scored.append((score, x, y, candidate_z, clearance, revisit_penalty, octomap_frontier_gain, coverage_gain, path_usefulness, oscillation_penalty, unknown_boundary_gain, occupied_penalty, collision_risk))
                 y += res
             x += res
         if not scored:
             self.status = 'NO_VALID_GROUND_CANDIDATE'
+            self.failure_reason = 'NO_VALID_WRAPPER_CANDIDATE' if self._wrapper_active() else 'NO_VALID_GROUND_CANDIDATE'
+            self.fallback_active = self._wrapper_active() and bool(self.get_parameter('enable_stub_fallback').value)
             self.last_candidate_count = len(scored) + len(rejected)
             self.last_valid_candidate_count = 0
             self.last_rejected_collision = rejected_collision
@@ -436,6 +466,7 @@ class Ground3DFrontier(Node):
             self.switched_goal_count += 1
         self.last_goal = (gx, gy, gz)
         self.last_goal_time = time.time()
+        self.selected_goal_count += 1
         self.active_goal_monitor = {
             'goal': self.last_goal,
             'start_time': time.time(),
@@ -555,9 +586,18 @@ class Ground3DFrontier(Node):
         msg = String()
         age = time.time() - self.last_goal_time if self.last_goal_time else -1.0
         octomap_active = self._octomap_active()
-        planning_mode = 'P2E_ground_octomap_frontier_quality' if octomap_active else 'P2D_ground_frontier_quality'
+        planner_mode = self._planner_mode()
+        planning_mode = 'P4A_ground_3d_frontier_v0' if planner_mode == 'ground_3d_frontier_v0' else ('P2E_ground_octomap_frontier_quality' if octomap_active else 'P2D_ground_frontier_quality')
+        path_length_avg = self.path_length_sum / max(self.path_feasible_count, 1)
+        endpoint_error_avg = self.endpoint_error_sum / max(self.path_feasible_count, 1)
+        repeat_ratio = 0.0
+        if self.visited:
+            keys = {(round(x), round(y)) for x, y in self.visited}
+            repeat_ratio = max(0.0, 1.0 - len(keys) / max(len(self.visited), 1))
         msg.data = (
             f'{self.status} odom_received={self.odom is not None} map_received={bool(self.points)} '
+            f'planner_mode={planner_mode} ground_planner_mode={planner_mode} '
+            f'fallback_active={str(self.fallback_active).lower()} failure_reason={self.failure_reason} '
             f'esdf_received={self.esdf_received} boundary_received={self.boundary_received} '
             f'candidate_count={self.last_candidate_count} valid_candidate_count={self.last_valid_candidate_count} '
             f'selected_score={self.last_selected_score:.3f} selected_goal={self.last_goal} '
@@ -572,6 +612,13 @@ class Ground3DFrontier(Node):
             f'rejected_by_blacklist_count={self.last_rejected_blacklist} rejected_by_low_gain_count={self.last_rejected_low_gain} '
             f'path_collision_risk={self.last_path_collision_risk} map_point_count={len(self.points)} '
             f'held_goal_count={self.held_goal_count} switched_goal_count={self.switched_goal_count} '
+            f'ground_candidate_count={self.last_candidate_count} ground_valid_candidate_count={self.last_valid_candidate_count} '
+            f'ground_selected_goal_count={self.selected_goal_count} ground_path_feasible_count={self.path_feasible_count} '
+            f'ground_path_infeasible_count={self.path_infeasible_count} '
+            f'ground_goal_blacklist_count={len(self.blacklist) + len(self.low_gain_blacklist)} '
+            f'ground_repeat_goal_ratio={repeat_ratio:.3f} ground_frontier_gain_max={self.last_octomap_frontier_gain:.3f} '
+            f'ground_unknown_boundary_gain_max={self.last_unknown_boundary_gain:.3f} '
+            f'ground_path_length_avg={path_length_avg:.3f} ground_endpoint_to_goal_distance_avg={endpoint_error_avg:.3f} '
             f'backend_mode={self.backend_mode} octomap_adaptive_scoring={str(octomap_active).lower()} '
             f'planning_mode={planning_mode} last_goal_age_sec={age:.2f}'
         )

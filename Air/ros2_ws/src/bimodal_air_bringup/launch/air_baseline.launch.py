@@ -1,9 +1,15 @@
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
+    planner_mode = LaunchConfiguration('planner_mode')
+    config_file = LaunchConfiguration('config_file')
     return LaunchDescription([
+        DeclareLaunchArgument('planner_mode', default_value='stub'),
+        DeclareLaunchArgument('config_file', default_value='/home/nuaa/ZHY/3DPlanner_FULL/Air/config/air_adapter.yaml'),
         Node(package='bimodal_air_adapter', executable='air_exploration_stub_node', output='screen',
-             parameters=['/home/nuaa/ZHY/3DPlanner_FULL/Air/config/air_adapter.yaml'])
+             parameters=[config_file, {'planner_mode': planner_mode}])
     ])
