@@ -1,0 +1,67 @@
+air_exploration_stub_node:
+  ros__parameters:
+    planner_mode: "fuel_style_v0"
+    air_quality_profile: "p3b_optimized"
+    enable_stub_fallback: true
+
+    air_goal_z: 1.4
+    fuel_style_z_min: 0.8
+    fuel_style_z_nominal: 1.4
+    fuel_style_z_max: 2.2
+    safety_radius: 0.48
+    air_octomap_safety_radius: 0.55
+    air_min_clearance_m: 0.50
+    update_period_sec: 5.0
+    visual_exploration_mode: true
+
+    candidate_count: 192
+    max_candidate_count: 192
+    max_candidate_markers: 180
+    min_goal_distance: 1.3
+    max_goal_distance: 7.2
+    air_candidate_radii: [2.0, 3.5, 5.0, 7.0]
+    air_candidate_yaw_samples: 24
+    air_candidate_z_levels: [1.0, 1.4, 1.8, 2.2]
+    air_min_candidate_separation_m: 0.55
+    air_expand_radius_on_low_gain: true
+
+    goal_hold_sec: 10.0
+    air_goal_min_hold_sec: 3.0
+    air_goal_max_hold_sec: 32.0
+    air_low_gain_retire_sec: 18.0
+    air_no_progress_timeout_sec: 22.0
+    air_stale_path_timeout_sec: 32.0
+    air_sector_escape_enable: true
+    min_goal_separation: 2.2
+    blacklist_radius: 1.15
+    blacklist_ttl_sec: 55.0
+    low_gain_window_sec: 15.0
+    min_coverage_gain_per_goal: 0.0035
+    low_gain_blacklist_ttl_sec: 100.0
+    recent_goal_history_size: 60
+
+    sector_balance_enabled: true
+    sector_count: 8
+    frontier_bias_enabled: true
+    coverage_gain_radius: 2.4
+    coverage_gain_weight: 3.1
+    frontier_gain_weight: 2.6
+    unknown_boundary_weight: 2.8
+    unknown_gain_weight: 2.1
+    novelty_gain_weight: 1.5
+    clearance_gain_weight: 0.7
+    sector_balance_weight: 1.2
+    forward_gain_weight: 0.35
+    heading_gain_weight: 0.25
+    distance_gain_weight: 0.25
+    path_length_penalty_weight: 0.35
+    occupied_penalty_weight: 4.2
+    occupied_density_penalty_weight: 0.9
+    obstacle_penalty_weight: 3.0
+    revisit_penalty_weight: 3.0
+    low_gain_penalty_weight: 1.4
+    stale_region_penalty_weight: 1.3
+    z_penalty_weight: 0.45
+    goal_switch_min_improvement: 0.18
+    air_endpoint_to_goal_max_m: 0.5
+    octomap_adaptive_scoring: true

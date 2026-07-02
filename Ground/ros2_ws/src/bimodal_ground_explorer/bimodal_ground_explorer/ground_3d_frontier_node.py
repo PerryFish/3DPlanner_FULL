@@ -431,7 +431,7 @@ class Ground3DFrontier(Node):
         if not scored:
             self.status = 'NO_VALID_GROUND_CANDIDATE'
             self.failure_reason = 'NO_VALID_WRAPPER_CANDIDATE' if self._wrapper_active() else 'NO_VALID_GROUND_CANDIDATE'
-            self.fallback_active = self._wrapper_active() and bool(self.get_parameter('enable_stub_fallback').value)
+            self.fallback_active = False
             self.last_candidate_count = len(scored) + len(rejected)
             self.last_valid_candidate_count = 0
             self.last_rejected_collision = rejected_collision
