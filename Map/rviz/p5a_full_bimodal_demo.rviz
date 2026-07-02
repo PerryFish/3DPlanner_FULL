@@ -1,0 +1,142 @@
+Panels:
+  - Class: rviz_common/Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Plane: XY
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+    - Class: rviz_common/Group
+      Enabled: true
+      Name: P5A Sensing
+      Displays:
+        - Class: rviz_default_plugins/PointCloud2
+          Enabled: true
+          Name: world_gt_cloud
+          Topic:
+            Value: /bimodal/world_gt_cloud
+          Size (m): 0.035
+          Style: Points
+        - Class: rviz_default_plugins/PointCloud2
+          Enabled: true
+          Name: bimodal_points
+          Topic:
+            Value: /bimodal/points
+          Size (m): 0.05
+          Style: Points
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: sensor_range_marker
+          Topic:
+            Value: /bimodal/sensor_range_marker
+    - Class: rviz_common/Group
+      Enabled: true
+      Name: P5A Shared 3D Map
+      Displays:
+        - Class: rviz_default_plugins/PointCloud2
+          Enabled: true
+          Name: map_3d
+          Topic:
+            Value: /bimodal/map_3d
+          Size (m): 0.035
+          Style: Points
+        - Class: rviz_default_plugins/PointCloud2
+          Enabled: true
+          Name: esdf
+          Topic:
+            Value: /bimodal/esdf
+          Size (m): 0.035
+          Style: Points
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: coverage_markers
+          Topic:
+            Value: /bimodal/coverage_markers
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: exploration_boundary
+          Topic:
+            Value: /bimodal/exploration_boundary
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: map_status_marker
+          Topic:
+            Value: /bimodal/map_status_marker
+    - Class: rviz_common/Group
+      Enabled: true
+      Name: P5A Planners
+      Displays:
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: air_candidate_markers
+          Topic:
+            Value: /air/candidate_markers
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: air_selected_goal_marker
+          Topic:
+            Value: /air/selected_goal_marker
+        - Class: rviz_default_plugins/Path
+          Enabled: true
+          Name: air_trajectory
+          Topic:
+            Value: /air/trajectory
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: ground_frontier_candidates
+          Topic:
+            Value: /ground/frontier_candidates
+        - Class: rviz_default_plugins/Path
+          Enabled: true
+          Name: ground_path
+          Topic:
+            Value: /ground/path
+        - Class: rviz_default_plugins/Pose
+          Enabled: true
+          Name: active_goal
+          Topic:
+            Value: /bimodal/active_goal
+        - Class: rviz_default_plugins/Path
+          Enabled: true
+          Name: active_path
+          Topic:
+            Value: /bimodal/active_path
+    - Class: rviz_common/Group
+      Enabled: true
+      Name: P5A Fake Execution
+      Displays:
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: robot_marker
+          Topic:
+            Value: /bimodal/robot_marker
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: executor_marker
+          Topic:
+            Value: /bimodal/executor_marker
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: executor_status_marker
+          Topic:
+            Value: /bimodal/executor_status_marker
+        - Class: rviz_default_plugins/Path
+          Enabled: true
+          Name: executed_path
+          Topic:
+            Value: /bimodal/executed_path
+  Enabled: true
+  Global Options:
+    Fixed Frame: map
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+  Value: true
+Window Geometry:
+  Height: 920
+  Width: 1500

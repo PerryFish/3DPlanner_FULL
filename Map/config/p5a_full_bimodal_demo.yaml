@@ -1,0 +1,28 @@
+p5a_full_bimodal_demo:
+  ros__parameters:
+    # Final default demo chain.
+    sensor_input_mode: "external_pointcloud"
+    selected_input_topic: "/points_raw"
+    bridge_output_topic: "/bimodal/points"
+    enable_synthetic_pointcloud: true
+    map_backend_mode: "octomap_style_voxel"
+
+    air_planner_mode: "fuel_style_v0"
+    air_quality_profile: "p3b_optimized"
+    air_config_file: "/home/nuaa/ZHY/3DPlanner_FULL/Air/config/p3b_air_fuel_quality.yaml"
+
+    ground_planner_mode: "ground_3d_frontier_v0"
+    ground_quality_profile: "p4b_optimized"
+    ground_config_file: "/home/nuaa/ZHY/3DPlanner_FULL/Ground/config/p4b_ground_3d_quality.yaml"
+
+    mode_mux_enable: true
+    fake_executor_enable: true
+    rviz_enable: true
+    mode_switch_period_sec: 75.0
+    active_path_republish_period_sec: 1.0
+    rviz_config_file: "/home/nuaa/ZHY/3DPlanner_FULL/Map/rviz/p5a_full_bimodal_demo.rviz"
+
+    # Supported fallback modes for development and regression debugging.
+    supported_sensor_input_modes: ["external_pointcloud", "virtual", "recorded_bag"]
+    supported_air_planner_modes: ["fuel_style_v0", "stub"]
+    supported_ground_planner_modes: ["ground_3d_frontier_v0", "stub"]
